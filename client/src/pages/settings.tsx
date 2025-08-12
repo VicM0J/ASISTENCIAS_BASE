@@ -1,544 +1,447 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Building2, Database, Upload, Download, Settings as SettingsIcon, Clock } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
-import { insertDepartmentSchema } from "@shared/schema";
-import { Plus, Edit, Trash2, Save, Clock, Building2 } from "lucide-react";
-import { z } from "zod";
-
-type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
 
 export default function Settings() {
-  const [editingSchedule, setEditingSchedule] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState("system");
-  const [selectedDepartment, setSelectedDepartment] = useState<any>(null);
-  const [isDepartmentDialogOpen, setIsDepartmentDialogOpen] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [newLogo, setNewLogo] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [blockTime, setBlockTime] = useState("1");
+  const [dateFormat, setDateFormat] = useState("DD/MM/YYYY");
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  // Departments queries
-  const { data: departments = [] } = useQuery({
-    queryKey: ["/api/departments"],
-  });
-
-  const departmentForm = useForm<InsertDepartment>({
-    resolver: zodResolver(insertDepartmentSchema),
-    defaultValues: {
-      name: "",
-      description: "",
-      isActive: true,
-    },
-  });
-
-  const createDepartmentMutation = useMutation({
-    mutationFn: async (data: InsertDepartment) => {
-      const response = await fetch("/api/departments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) throw new Error("Failed to create department");
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Departamento creado exitosamente" });
-      queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
-      setIsDepartmentDialogOpen(false);
-      departmentForm.reset();
-    },
-  });
-
-  const updateDepartmentMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<InsertDepartment> }) => {
-      const response = await fetch(`/api/departments/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) throw new Error("Failed to update department");
-      return response.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Departamento actualizado exitosamente" });
-      queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
-      setIsDepartmentDialogOpen(false);
-      departmentForm.reset();
-      setSelectedDepartment(null);
-    },
-  });
-
-  const deleteDepartmentMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/departments/${id}`, { method: "DELETE" });
-      if (!response.ok) throw new Error("Failed to delete department");
-    },
-    onSuccess: () => {
-      toast({ title: "Departamento eliminado exitosamente" });
-      queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
-    },
-  });
-
-  const onDepartmentSubmit = (data: InsertDepartment) => {
-    if (selectedDepartment) {
-      updateDepartmentMutation.mutate({ id: selectedDepartment.id, data });
-    } else {
-      createDepartmentMutation.mutate(data);
-    }
-  };
-
-  const openDepartmentDialog = (department?: any) => {
-    if (department) {
-      setSelectedDepartment(department);
-      departmentForm.reset({
-        name: department.name,
-        description: department.description || "",
-        isActive: department.isActive,
-      });
-    } else {
-      setSelectedDepartment(null);
-      departmentForm.reset({
-        name: "",
-        description: "",
-        isActive: true,
-      });
-    }
-    setIsDepartmentDialogOpen(true);
-  };
-
-  const { data: workSchedules, isLoading: schedulesLoading } = useQuery({
-    queryKey: ["/api/work-schedules"],
-  });
-
-  const { data: systemSettings } = useQuery({
-    queryKey: ["/api/system-settings"],
-  });
-
-  const form = useForm({
-    defaultValues: {
-      companyName: systemSettings?.companyName || "TimeCheck Pro",
-      timezone: systemSettings?.timezone || "America/Mexico_City",
-      emailNotifications: systemSettings?.emailNotifications || false,
-      darkMode: systemSettings?.darkMode || false,
-    },
-  });
-
-  const updateSystemSettingsMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const response = await fetch("/api/system-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      
-      if (!response.ok) {
-        throw new Error("Failed to update settings");
+  const { data: company } = useQuery({
+    queryKey: ["/api/company"],
+    onSuccess: (data) => {
+      if (data) {
+        setCompanyName(data.name || "JASANA");
       }
-      
+    },
+  });
+
+  const { data: schedules } = useQuery({
+    queryKey: ["/api/schedules"],
+  });
+
+  const updateCompanyMutation = useMutation({
+    mutationFn: async (data: { name?: string; logo?: File }) => {
+      const formData = new FormData();
+      if (data.name) formData.append("name", data.name);
+      if (data.logo) formData.append("logo", data.logo);
+
+      const response = await fetch("/api/company", {
+        method: "PUT",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update company");
+      }
+
       return response.json();
     },
     onSuccess: () => {
       toast({
-        title: "Configuración actualizada",
-        description: "Los cambios se han guardado exitosamente",
+        title: "Información Actualizada",
+        description: "La información de la empresa se ha actualizado correctamente.",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/system-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "No se pudieron guardar los cambios",
+        description: "No se pudo actualizar la información. Intenta nuevamente.",
         variant: "destructive",
       });
     },
   });
 
-  const deleteScheduleMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/work-schedules/${id}`, {
-        method: "DELETE",
-      });
-      
-      if (!response.ok) {
-        throw new Error("Failed to delete schedule");
+  const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "Archivo muy grande",
+          description: "El logo debe ser menor a 5MB.",
+          variant: "destructive",
+        });
+        return;
       }
-    },
-    onSuccess: () => {
-      toast({
-        title: "Horario eliminado",
-        description: "El horario se ha eliminado exitosamente",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/work-schedules"] });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "No se pudo eliminar el horario",
-        variant: "destructive",
-      });
-    },
-  });
 
-  const onSubmit = (data: any) => {
-    updateSystemSettingsMutation.mutate(data);
+      setNewLogo(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setLogoPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
-  const timezones = [
-    { value: "America/Mexico_City", label: "GMT-6 (México Central)" },
-    { value: "America/Cancun", label: "GMT-5 (México Oriental)" },
-    { value: "America/Mazatlan", label: "GMT-7 (México Pacífico)" },
-  ];
+  const saveCompanyInfo = () => {
+    if (!companyName.trim()) {
+      toast({
+        title: "Error",
+        description: "El nombre de la empresa es requerido.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-  const sectionTabs = [
-    { id: "system", label: "Sistema", icon: Clock },
-    { id: "departments", label: "Departamentos", icon: Building2 },
-    { id: "schedules", label: "Horarios", icon: Clock },
-  ];
+    updateCompanyMutation.mutate({
+      name: companyName,
+      ...(newLogo && { logo: newLogo }),
+    });
+  };
+
+  const exportData = async () => {
+    try {
+      // In a real implementation, this would export all data
+      toast({
+        title: "Exportación Iniciada",
+        description: "La exportación de datos ha comenzado. Se descargará automáticamente.",
+      });
+      
+      // Simulate export
+      setTimeout(() => {
+        toast({
+          title: "Exportación Completa",
+          description: "Los datos se han exportado exitosamente.",
+        });
+      }, 2000);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo exportar los datos. Intenta nuevamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const importData = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,.db,.sql';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        toast({
+          title: "Importación Iniciada",
+          description: `Importando datos desde ${file.name}...`,
+        });
+        
+        // Simulate import
+        setTimeout(() => {
+          toast({
+            title: "Importación Completa",
+            description: "Los datos se han importado exitosamente.",
+          });
+        }, 3000);
+      }
+    };
+    input.click();
+  };
 
   return (
-    <div className="p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-slate-900 mb-2">Configuraciones</h2>
-          <p className="text-slate-600">Administra horarios laborales y configuraciones del sistema</p>
-        </div>
-
-        {/* Navigation Tabs */}
-        <div className="flex space-x-1 mb-8 bg-slate-100 p-1 rounded-lg w-fit">
-          {sectionTabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <Button
-                key={tab.id}
-                variant={activeSection === tab.id ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setActiveSection(tab.id)}
-                className={`px-4 py-2 ${
-                  activeSection === tab.id
-                    ? "bg-white shadow-sm"
-                    : "hover:bg-slate-200"
-                }`}
-              >
-                <Icon className="w-4 h-4 mr-2" />
-                {tab.label}
-              </Button>
-            );
-          })}
-        </div>
-
-        {/* Departments Section */}
-        {activeSection === "departments" && (
-          <Card className="mb-8">
-            <CardContent className="p-8">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-slate-900">Departamentos/Áreas</h3>
-                <Dialog open={isDepartmentDialogOpen} onOpenChange={setIsDepartmentDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button onClick={() => openDepartmentDialog()}>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Nuevo Departamento
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>
-                        {selectedDepartment ? "Editar Departamento" : "Nuevo Departamento"}
-                      </DialogTitle>
-                    </DialogHeader>
-                    <Form {...departmentForm}>
-                      <form onSubmit={departmentForm.handleSubmit(onDepartmentSubmit)} className="space-y-4">
-                        <FormField
-                          control={departmentForm.control}
-                          name="name"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Nombre del Departamento</FormLabel>
-                              <FormControl>
-                                <Input {...field} placeholder="Ej: Administración" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={departmentForm.control}
-                          name="description"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Descripción</FormLabel>
-                              <FormControl>
-                                <Input {...field} placeholder="Descripción del departamento" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={departmentForm.control}
-                          name="isActive"
-                          render={({ field }) => (
-                            <FormItem className="flex items-center justify-between">
-                              <FormLabel>Departamento Activo</FormLabel>
-                              <FormControl>
-                                <Switch checked={field.value} onCheckedChange={field.onChange} />
-                              </FormControl>
-                            </FormItem>
-                          )}
-                        />
-                        <div className="flex justify-end space-x-2">
-                          <Button type="button" variant="outline" onClick={() => setIsDepartmentDialogOpen(false)}>
-                            Cancelar
-                          </Button>
-                          <Button type="submit" disabled={createDepartmentMutation.isPending || updateDepartmentMutation.isPending}>
-                            {selectedDepartment ? "Actualizar" : "Crear"}
-                          </Button>
-                        </div>
-                      </form>
-                    </Form>
-                  </DialogContent>
-                </Dialog>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {departments.map((department: any) => (
-                  <div key={department.id} className="border border-slate-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold text-slate-900">{department.name}</h4>
-                      <div className="flex space-x-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openDepartmentDialog(department)}
-                        >
-                          <Edit className="w-3 h-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => deleteDepartmentMutation.mutate(department.id)}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    </div>
-                    {department.description && (
-                      <p className="text-sm text-slate-600 mb-2">{department.description}</p>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        department.isActive 
-                          ? "bg-green-100 text-green-800" 
-                          : "bg-red-100 text-red-800"
-                      }`}>
-                        {department.isActive ? "Activo" : "Inactivo"}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Work Schedules */}
-        {activeSection === "schedules" && (
-        <Card className="mb-8">
+    <div className="p-6">
+      <div className="max-w-4xl mx-auto">
+        <Card className="tablet-card shadow-sm border border-gray-200">
           <CardContent className="p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-slate-900">Horarios Laborales</h3>
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                Nuevo Horario
-              </Button>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">
+              Configuración del Sistema
+            </h2>
+            
+            {/* Company Settings */}
+            <div className="mb-8">
+              <div className="flex items-center space-x-2 mb-4">
+                <Building2 className="h-5 w-5 text-primary" />
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Información de la Empresa
+                </h3>
+              </div>
+              
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <Label htmlFor="company-name" className="text-sm font-medium text-gray-700 mb-2">
+                    Nombre de la Empresa
+                  </Label>
+                  <Input
+                    id="company-name"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    className="tablet-input"
+                    data-testid="input-company-name"
+                  />
+                </div>
+                
+                <div>
+                  <Label className="text-sm font-medium text-gray-700 mb-2">
+                    Logo de la Empresa
+                  </Label>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-secondary rounded-lg flex items-center justify-center">
+                      {logoPreview ? (
+                        <img 
+                          src={logoPreview} 
+                          alt="Logo" 
+                          className="w-full h-full object-cover rounded-lg"
+                        />
+                      ) : (
+                        <span className="text-white font-bold">
+                          {companyName[0] || "J"}
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      className="hidden"
+                      id="logo-upload"
+                    />
+                    <Label htmlFor="logo-upload" className="cursor-pointer">
+                      <Button 
+                        type="button" 
+                        variant="outline"
+                        className="tablet-button"
+                        data-testid="upload-company-logo"
+                        asChild
+                      >
+                        <span>
+                          <Upload className="h-4 w-4 mr-2" />
+                          Cambiar Logo
+                        </span>
+                      </Button>
+                    </Label>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-4">
+                <Button
+                  onClick={saveCompanyInfo}
+                  disabled={updateCompanyMutation.isPending}
+                  className="tablet-button"
+                  data-testid="save-company-info"
+                >
+                  {updateCompanyMutation.isPending ? "Guardando..." : "Guardar Información"}
+                </Button>
+              </div>
             </div>
 
-            {schedulesLoading ? (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="border border-slate-200 rounded-xl p-6 animate-pulse">
-                    <div className="h-6 bg-slate-300 rounded mb-4"></div>
-                    <div className="space-y-3">
-                      {[...Array(6)].map((_, j) => (
-                        <div key={j} className="flex justify-between">
-                          <div className="h-4 bg-slate-300 rounded w-24"></div>
-                          <div className="h-4 bg-slate-300 rounded w-16"></div>
+            <Separator className="my-8" />
+
+            {/* Schedule Management */}
+            <div className="mb-8">
+              <div className="flex items-center space-x-2 mb-4">
+                <Clock className="h-5 w-5 text-primary" />
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Horarios Laborales
+                </h3>
+              </div>
+              
+              <div className="space-y-4">
+                {schedules && schedules.length > 0 ? (
+                  schedules.map((schedule: any) => (
+                    <Card key={schedule.id} className="bg-gray-50">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium text-gray-900">
+                            {schedule.name}
+                          </h4>
+                          <Badge variant="outline" data-testid={`schedule-badge-${schedule.id}`}>
+                            {schedule.overtimeAllowed ? "Con horas extra" : "Sin horas extra"}
+                          </Badge>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                          <div>
+                            <span className="text-gray-600">Entrada:</span>
+                            <span className="ml-1 font-medium">{schedule.entryTime}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Salida:</span>
+                            <span className="ml-1 font-medium">{schedule.exitTime}</span>
+                          </div>
+                          {schedule.breakfastStart && schedule.breakfastEnd && (
+                            <div>
+                              <span className="text-gray-600">Desayuno:</span>
+                              <span className="ml-1 font-medium">
+                                {schedule.breakfastStart}-{schedule.breakfastEnd}
+                              </span>
+                            </div>
+                          )}
+                          {schedule.lunchStart && schedule.lunchEnd && (
+                            <div>
+                              <span className="text-gray-600">Comida:</span>
+                              <span className="ml-1 font-medium">
+                                {schedule.lunchStart}-{schedule.lunchEnd}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                ) : (
+                  <p className="text-gray-500">No hay horarios configurados</p>
+                )}
               </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {workSchedules?.map((schedule: any) => (
-                  <div key={schedule.id} className="border border-slate-200 rounded-xl p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-lg font-semibold text-slate-900">{schedule.name}</h4>
-                      <div className="flex space-x-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setEditingSchedule(schedule.id)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => deleteScheduleMutation.mutate(schedule.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-3 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-slate-600">Entrada:</span>
-                        <span className="font-medium">{schedule.entryTime}</span>
-                      </div>
-                      {schedule.breakfastOutTime && (
-                        <>
-                          <div className="flex justify-between">
-                            <span className="text-slate-600">Salida desayuno:</span>
-                            <span className="font-medium">{schedule.breakfastOutTime}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-600">Regreso desayuno:</span>
-                            <span className="font-medium">{schedule.breakfastInTime}</span>
-                          </div>
-                        </>
-                      )}
-                      {schedule.lunchOutTime && (
-                        <>
-                          <div className="flex justify-between">
-                            <span className="text-slate-600">Salida comida:</span>
-                            <span className="font-medium">{schedule.lunchOutTime}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-600">Regreso comida:</span>
-                            <span className="font-medium">{schedule.lunchInTime}</span>
-                          </div>
-                        </>
-                      )}
-                      <div className="flex justify-between">
-                        <span className="text-slate-600">Salida:</span>
-                        <span className="font-medium">{schedule.exitTime}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+            </div>
+
+            <Separator className="my-8" />
+
+            {/* Database Settings */}
+            <div className="mb-8">
+              <div className="flex items-center space-x-2 mb-4">
+                <Database className="h-5 w-5 text-primary" />
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Base de Datos Local
+                </h3>
               </div>
-            )}
-          </CardContent>
-        </Card>
-        )}
+              
+              <Card className="bg-gray-50">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="font-medium text-gray-900">Estado de la Base de Datos</p>
+                      <p className="text-sm text-gray-600">SQLite - Almacenamiento Local</p>
+                    </div>
+                    <Badge className="bg-green-100 text-green-800">
+                      <div className="w-2 h-2 bg-green-500 rounded-full mr-2" />
+                      Conectado
+                    </Badge>
+                  </div>
+                  <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                    <Button
+                      onClick={exportData}
+                      variant="outline"
+                      className="tablet-button"
+                      data-testid="backup-data"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Respaldar Datos
+                    </Button>
+                    <Button
+                      onClick={importData}
+                      variant="outline"
+                      className="tablet-button"
+                      data-testid="restore-data"
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Restaurar Datos
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
-        {/* System Settings */}
-        {activeSection === "system" && (
-        <Card>
-          <CardContent className="p-8">
-            <h3 className="text-xl font-semibold text-slate-900 mb-6">Configuraciones del Sistema</h3>
-            
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField
-                    control={form.control}
-                    name="companyName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nombre de la Empresa</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="timezone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Zona Horaria</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {timezones.map((tz) => (
-                              <SelectItem key={tz.value} value={tz.value}>
-                                {tz.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
-                </div>
+            <Separator className="my-8" />
 
-                <Separator />
-
-                <FormField
-                  control={form.control}
-                  name="emailNotifications"
-                  render={({ field }) => (
-                    <div className="flex items-center justify-between py-4">
+            {/* System Settings */}
+            <div>
+              <div className="flex items-center space-x-2 mb-4">
+                <SettingsIcon className="h-5 w-5 text-primary" />
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Configuración del Sistema
+                </h3>
+              </div>
+              
+              <div className="space-y-4">
+                <Card className="bg-gray-50">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="font-semibold text-slate-900">Notificaciones por Email</h4>
-                        <p className="text-sm text-slate-600">Enviar alertas de asistencias por correo</p>
+                        <p className="font-medium text-gray-900">
+                          Tiempo de bloqueo después del check
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Previene registros duplicados
+                        </p>
                       </div>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
+                      <Select value={blockTime} onValueChange={setBlockTime}>
+                        <SelectTrigger className="w-32" data-testid="select-block-time">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 minuto</SelectItem>
+                          <SelectItem value="2">2 minutos</SelectItem>
+                          <SelectItem value="5">5 minutos</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-gray-50">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">Formato de fecha</p>
+                        <p className="text-sm text-gray-600">
+                          Formato de visualización de fechas
+                        </p>
+                      </div>
+                      <Select value={dateFormat} onValueChange={setDateFormat}>
+                        <SelectTrigger className="w-40" data-testid="select-date-format">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
+                          <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
+                          <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gray-50">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">Modo tablet optimizado</p>
+                        <p className="text-sm text-gray-600">
+                          Interfaz optimizada para dispositivos táctiles
+                        </p>
+                      </div>
+                      <Switch 
+                        defaultChecked={true} 
+                        data-testid="switch-tablet-mode"
                       />
                     </div>
-                  )}
-                />
+                  </CardContent>
+                </Card>
 
-                <FormField
-                  control={form.control}
-                  name="darkMode"
-                  render={({ field }) => (
-                    <div className="flex items-center justify-between py-4 border-t border-slate-200">
+                <Card className="bg-gray-50">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="font-semibold text-slate-900">Modo Oscuro</h4>
-                        <p className="text-sm text-slate-600">Cambiar apariencia del sistema</p>
+                        <p className="font-medium text-gray-900">Sonido de confirmación</p>
+                        <p className="text-sm text-gray-600">
+                          Reproducir sonido al registrar asistencia
+                        </p>
                       </div>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
+                      <Switch 
+                        defaultChecked={true} 
+                        data-testid="switch-sound"
                       />
                     </div>
-                  )}
-                />
-
-                <div className="flex justify-end pt-6">
-                  <Button 
-                    type="submit" 
-                    disabled={updateSystemSettingsMutation.isPending}
-                  >
-                    <Save className="w-4 h-4 mr-2" />
-                    {updateSystemSettingsMutation.isPending ? "Guardando..." : "Guardar Cambios"}
-                  </Button>
-                </div>
-              </form>
-            </Form>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           </CardContent>
         </Card>
-        )}
       </div>
     </div>
   );

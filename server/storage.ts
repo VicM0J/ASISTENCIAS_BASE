@@ -1,399 +1,461 @@
-import { 
-  type Employee, 
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import {
+  companies,
+  schedules,
+  employees,
+  attendances,
+  type Company,
+  type InsertCompany,
+  type Schedule,
+  type InsertSchedule,
+  type Employee,
   type InsertEmployee,
-  type WorkSchedule,
-  type InsertWorkSchedule,
-  type AttendanceRecord,
-  type InsertAttendanceRecord,
-  type CredentialSettings,
-  type InsertCredentialSettings,
-  type SystemSettings,
-  type InsertSystemSettings,
-  type Department,
-  type InsertDepartment
+  type Attendance,
+  type InsertAttendance,
+  type EmployeeWithSchedule,
+  type AttendanceWithEmployee,
+  type AttendanceReport,
 } from "@shared/schema";
+import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import path from "path";
 
-export interface IStorage {
-  // Employees
-  getEmployees(): Promise<Employee[]>;
-  getEmployee(id: string): Promise<Employee | undefined>;
-  getEmployeeByBarcodeData(barcodeData: string): Promise<Employee | undefined>;
-  createEmployee(employee: InsertEmployee): Promise<Employee>;
-  updateEmployee(id: string, employee: Partial<InsertEmployee>): Promise<Employee | undefined>;
-  deleteEmployee(id: string): Promise<boolean>;
+const sqlite = new Database(path.join(process.cwd(), "attendance.db"));
+sqlite.pragma("journal_mode = WAL");
 
-  // Work Schedules
-  getWorkSchedules(): Promise<WorkSchedule[]>;
-  getWorkSchedule(id: string): Promise<WorkSchedule | undefined>;
-  createWorkSchedule(schedule: InsertWorkSchedule): Promise<WorkSchedule>;
-  updateWorkSchedule(id: string, schedule: Partial<InsertWorkSchedule>): Promise<WorkSchedule | undefined>;
-  deleteWorkSchedule(id: string): Promise<boolean>;
+const db = drizzle(sqlite);
 
-  // Attendance Records
-  getAttendanceRecords(filters?: { 
-    employeeId?: string; 
-    startDate?: string; 
-    endDate?: string; 
-    department?: string;
-  }): Promise<AttendanceRecord[]>;
-  getAttendanceRecord(id: string): Promise<AttendanceRecord | undefined>;
-  getTodayAttendanceRecord(employeeId: string): Promise<AttendanceRecord | undefined>;
-  createAttendanceRecord(record: InsertAttendanceRecord): Promise<AttendanceRecord>;
-  updateAttendanceRecord(id: string, record: Partial<InsertAttendanceRecord>): Promise<AttendanceRecord | undefined>;
+// Initialize database with default data
+async function initializeDatabase() {
+  // Create tables if they don't exist
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS companies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL DEFAULT 'JASANA',
+      logo BLOB,
+      primary_color TEXT NOT NULL DEFAULT '#0D9488',
+      created_at INTEGER DEFAULT (unixepoch())
+    );
 
-  // Departments
-  getDepartments(): Promise<Department[]>;
-  getDepartment(id: string): Promise<Department | undefined>;
-  createDepartment(department: InsertDepartment): Promise<Department>;
-  updateDepartment(id: string, department: Partial<InsertDepartment>): Promise<Department | undefined>;
-  deleteDepartment(id: string): Promise<boolean>;
+    CREATE TABLE IF NOT EXISTS schedules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      entry_time TEXT NOT NULL,
+      breakfast_start TEXT,
+      breakfast_end TEXT,
+      lunch_start TEXT,
+      lunch_end TEXT,
+      exit_time TEXT NOT NULL,
+      overtime_allowed INTEGER DEFAULT 0,
+      created_at INTEGER DEFAULT (unixepoch())
+    );
 
-  // Credential Settings
-  getCredentialSettings(): Promise<CredentialSettings | undefined>;
-  updateCredentialSettings(settings: InsertCredentialSettings): Promise<CredentialSettings>;
+    CREATE TABLE IF NOT EXISTS employees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_id TEXT NOT NULL UNIQUE,
+      full_name TEXT NOT NULL,
+      email TEXT,
+      phone TEXT,
+      department TEXT NOT NULL,
+      schedule_id INTEGER REFERENCES schedules(id),
+      photo BLOB,
+      barcode TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      created_at INTEGER DEFAULT (unixepoch())
+    );
 
-  // System Settings
-  getSystemSettings(): Promise<SystemSettings | undefined>;
-  updateSystemSettings(settings: InsertSystemSettings): Promise<SystemSettings>;
-}
+    CREATE TABLE IF NOT EXISTS attendances (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_id INTEGER NOT NULL REFERENCES employees(id),
+      check_in INTEGER,
+      check_out INTEGER,
+      break_start INTEGER,
+      break_end INTEGER,
+      lunch_start INTEGER,
+      lunch_end INTEGER,
+      total_hours REAL DEFAULT 0,
+      overtime_hours REAL DEFAULT 0,
+      date TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at INTEGER DEFAULT (unixepoch())
+    );
+  `);
 
-export class MemStorage implements IStorage {
-  private employees: Map<string, Employee>;
-  private workSchedules: Map<string, WorkSchedule>;
-  private attendanceRecords: Map<string, AttendanceRecord>;
-  private departments: Map<string, Department>;
-  private credentialSettings: CredentialSettings | undefined;
-  private systemSettings: SystemSettings | undefined;
-
-  constructor() {
-    this.employees = new Map();
-    this.workSchedules = new Map();
-    this.attendanceRecords = new Map();
-    this.departments = new Map();
-    
-    // Initialize with default data
-    this.initializeDefaultData();
+  // Insert default company if none exists
+  const existingCompany = await db.select().from(companies).limit(1);
+  if (existingCompany.length === 0) {
+    await db.insert(companies).values({
+      name: "JASANA",
+      primaryColor: "#0D9488",
+    });
   }
 
-  private initializeDefaultData() {
-    const adminSchedule: WorkSchedule = {
-      id: randomUUID(),
-      name: "Horario Administrativo",
-      entryTime: "08:00",
-      breakfastOutTime: "10:00",
-      breakfastInTime: "10:30",
-      lunchOutTime: "14:00",
-      lunchInTime: "15:00",
-      exitTime: "18:00",
-      overtimeEnabled: true,
-      createdAt: new Date(),
-    };
-
-    const schedule1: WorkSchedule = {
-      id: randomUUID(),
-      name: "Horario 1",
-      entryTime: "07:00",
-      breakfastOutTime: "09:30",
-      breakfastInTime: "10:00",
-      lunchOutTime: "13:00",
-      lunchInTime: "14:00",
-      exitTime: "17:00",
-      overtimeEnabled: true,
-      createdAt: new Date(),
-    };
-
-    const schedule2: WorkSchedule = {
-      id: randomUUID(),
-      name: "Horario 2",
-      entryTime: "09:00",
-      breakfastOutTime: "11:00",
-      breakfastInTime: "11:30",
-      lunchOutTime: "15:00",
-      lunchInTime: "16:00",
-      exitTime: "19:00",
-      overtimeEnabled: false,
-      createdAt: new Date(),
-    };
-
-    this.workSchedules.set(adminSchedule.id, adminSchedule);
-    this.workSchedules.set(schedule1.id, schedule1);
-    this.workSchedules.set(schedule2.id, schedule2);
-
-    // Default departments
-    const defaultDepartments = [
-      { name: "Administración", description: "Área administrativa general" },
-      { name: "Ventas", description: "Departamento de ventas" },
-      { name: "Recursos Humanos", description: "Gestión de personal" },
-      { name: "Tecnología", description: "Departamento de IT" },
-      { name: "Operaciones", description: "Operaciones y logística" },
-      { name: "Marketing", description: "Marketing y publicidad" },
-      { name: "Finanzas", description: "Departamento financiero" },
-    ];
-
-    defaultDepartments.forEach(dept => {
-      const department: Department = {
-        id: randomUUID(),
-        name: dept.name,
-        description: dept.description,
-        isActive: true,
-        createdAt: new Date(),
-      };
-      this.departments.set(department.id, department);
-    });
-
-    // Default system settings
-    this.systemSettings = {
-      id: randomUUID(),
-      companyName: "TimeCheck Pro",
-      timezone: "America/Mexico_City",
-      emailNotifications: true,
-      darkMode: false,
-      updatedAt: new Date(),
-    };
-
-    // Default credential settings
-    this.credentialSettings = {
-      id: randomUUID(),
-      companyName: "TimeCheck Pro",
-      logoUrl: null,
-      primaryColor: "#2563EB",
-      fontFamily: "Inter",
-      template: {
-        width: 85,
-        height: 54,
-        elements: [
-          {
-            type: "employeeId",
-            position: { x: 3, y: 3 },
-            size: { width: 20, height: 4 },
-            style: { fontSize: "10px", fontWeight: "bold" }
-          },
-          {
-            type: "employeeName",
-            position: { x: 3, y: 8 },
-            size: { width: 40, height: 6 },
-            style: { fontSize: "12px", fontWeight: "600" }
-          },
-          {
-            type: "department",
-            position: { x: 3, y: 14 },
-            size: { width: 40, height: 4 },
-            style: { fontSize: "8px" }
-          },
-          {
-            type: "photo",
-            position: { x: 67, y: 3 },
-            size: { width: 12, height: 12 },
-            style: {}
-          },
-          {
-            type: "logo",
-            position: { x: 75, y: 3 },
-            size: { width: 8, height: 8 },
-            style: {}
-          },
-          {
-            type: "barcode",
-            position: { x: 3, y: 45 },
-            size: { width: 79, height: 8 },
-            style: {}
-          }
-        ]
+  // Insert default schedules if none exist
+  const existingSchedules = await db.select().from(schedules).limit(1);
+  if (existingSchedules.length === 0) {
+    await db.insert(schedules).values([
+      {
+        name: "Horario Administrativo",
+        entryTime: "08:00",
+        breakfastStart: "10:00",
+        breakfastEnd: "10:30",
+        lunchStart: "14:00",
+        lunchEnd: "15:00",
+        exitTime: "18:00",
+        overtimeAllowed: true,
       },
-      updatedAt: new Date(),
-    };
+      {
+        name: "Horario 1",
+        entryTime: "07:00",
+        breakfastStart: "09:00",
+        breakfastEnd: "09:15",
+        lunchStart: "13:00",
+        lunchEnd: "14:00",
+        exitTime: "16:00",
+        overtimeAllowed: false,
+      },
+      {
+        name: "Horario 2",
+        entryTime: "09:00",
+        breakfastStart: "11:00",
+        breakfastEnd: "11:15",
+        lunchStart: "15:00",
+        lunchEnd: "16:00",
+        exitTime: "19:00",
+        overtimeAllowed: true,
+      },
+    ]);
+  }
+}
+
+export interface IStorage {
+  // Company methods
+  getCompany(): Promise<Company | undefined>;
+  updateCompany(data: Partial<InsertCompany>): Promise<Company>;
+
+  // Schedule methods
+  getSchedules(): Promise<Schedule[]>;
+  getSchedule(id: number): Promise<Schedule | undefined>;
+  createSchedule(data: InsertSchedule): Promise<Schedule>;
+  updateSchedule(id: number, data: Partial<InsertSchedule>): Promise<Schedule>;
+  deleteSchedule(id: number): Promise<void>;
+
+  // Employee methods
+  getEmployees(): Promise<EmployeeWithSchedule[]>;
+  getEmployee(id: number): Promise<EmployeeWithSchedule | undefined>;
+  getEmployeeByEmployeeId(employeeId: string): Promise<EmployeeWithSchedule | undefined>;
+  getEmployeeByBarcode(barcode: string): Promise<EmployeeWithSchedule | undefined>;
+  createEmployee(data: InsertEmployee): Promise<Employee>;
+  updateEmployee(id: number, data: Partial<InsertEmployee>): Promise<Employee>;
+  deleteEmployee(id: number): Promise<void>;
+
+  // Attendance methods
+  getAttendances(startDate?: string, endDate?: string, departmentFilter?: string): Promise<AttendanceWithEmployee[]>;
+  getEmployeeAttendances(employeeId: number, startDate?: string, endDate?: string): Promise<Attendance[]>;
+  getTodayAttendance(employeeId: number): Promise<Attendance | undefined>;
+  createAttendance(data: InsertAttendance): Promise<Attendance>;
+  updateAttendance(id: number, data: Partial<InsertAttendance>): Promise<Attendance>;
+  checkIn(employeeId: number): Promise<Attendance>;
+  checkOut(employeeId: number): Promise<Attendance>;
+  getAttendanceReport(startDate: string, endDate: string, departmentFilter?: string): Promise<AttendanceReport[]>;
+}
+
+export class SqliteStorage implements IStorage {
+  constructor() {
+    initializeDatabase();
+  }
+
+  // Company methods
+  async getCompany(): Promise<Company | undefined> {
+    const result = await db.select().from(companies).limit(1);
+    return result[0];
+  }
+
+  async updateCompany(data: Partial<InsertCompany>): Promise<Company> {
+    const company = await this.getCompany();
+    if (company) {
+      await db.update(companies).set(data).where(eq(companies.id, company.id));
+      return { ...company, ...data } as Company;
+    } else {
+      const result = await db.insert(companies).values(data as InsertCompany).returning();
+      return result[0];
+    }
+  }
+
+  // Schedule methods
+  async getSchedules(): Promise<Schedule[]> {
+    return await db.select().from(schedules).orderBy(schedules.name);
+  }
+
+  async getSchedule(id: number): Promise<Schedule | undefined> {
+    const result = await db.select().from(schedules).where(eq(schedules.id, id)).limit(1);
+    return result[0];
+  }
+
+  async createSchedule(data: InsertSchedule): Promise<Schedule> {
+    const result = await db.insert(schedules).values(data).returning();
+    return result[0];
+  }
+
+  async updateSchedule(id: number, data: Partial<InsertSchedule>): Promise<Schedule> {
+    await db.update(schedules).set(data).where(eq(schedules.id, id));
+    const updated = await this.getSchedule(id);
+    if (!updated) throw new Error("Schedule not found");
+    return updated;
+  }
+
+  async deleteSchedule(id: number): Promise<void> {
+    await db.delete(schedules).where(eq(schedules.id, id));
   }
 
   // Employee methods
-  async getEmployees(): Promise<Employee[]> {
-    return Array.from(this.employees.values());
+  async getEmployees(): Promise<EmployeeWithSchedule[]> {
+    const result = await db
+      .select()
+      .from(employees)
+      .leftJoin(schedules, eq(employees.scheduleId, schedules.id))
+      .where(eq(employees.isActive, true))
+      .orderBy(employees.fullName);
+
+    return result.map((row) => ({
+      ...row.employees,
+      schedule: row.schedules || undefined,
+    }));
   }
 
-  async getEmployee(id: string): Promise<Employee | undefined> {
-    return this.employees.get(id);
-  }
+  async getEmployee(id: number): Promise<EmployeeWithSchedule | undefined> {
+    const result = await db
+      .select()
+      .from(employees)
+      .leftJoin(schedules, eq(employees.scheduleId, schedules.id))
+      .where(eq(employees.id, id))
+      .limit(1);
 
-  async getEmployeeByBarcodeData(barcodeData: string): Promise<Employee | undefined> {
-    return Array.from(this.employees.values()).find(
-      employee => employee.barcodeData === barcodeData
-    );
-  }
+    if (result.length === 0) return undefined;
 
-  async createEmployee(insertEmployee: InsertEmployee): Promise<Employee> {
-    const id = randomUUID();
-    const employee: Employee = {
-      ...insertEmployee,
-      id,
-      createdAt: new Date(),
+    return {
+      ...result[0].employees,
+      schedule: result[0].schedules || undefined,
     };
-    this.employees.set(id, employee);
-    return employee;
   }
 
-  async updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee | undefined> {
-    const employee = this.employees.get(id);
-    if (!employee) return undefined;
+  async getEmployeeByEmployeeId(employeeId: string): Promise<EmployeeWithSchedule | undefined> {
+    const result = await db
+      .select()
+      .from(employees)
+      .leftJoin(schedules, eq(employees.scheduleId, schedules.id))
+      .where(eq(employees.employeeId, employeeId))
+      .limit(1);
 
-    const updatedEmployee = { ...employee, ...updates };
-    this.employees.set(id, updatedEmployee);
-    return updatedEmployee;
-  }
+    if (result.length === 0) return undefined;
 
-  async deleteEmployee(id: string): Promise<boolean> {
-    return this.employees.delete(id);
-  }
-
-  // Work Schedule methods
-  async getWorkSchedules(): Promise<WorkSchedule[]> {
-    return Array.from(this.workSchedules.values());
-  }
-
-  async getWorkSchedule(id: string): Promise<WorkSchedule | undefined> {
-    return this.workSchedules.get(id);
-  }
-
-  async createWorkSchedule(insertSchedule: InsertWorkSchedule): Promise<WorkSchedule> {
-    const id = randomUUID();
-    const schedule: WorkSchedule = {
-      ...insertSchedule,
-      id,
-      createdAt: new Date(),
+    return {
+      ...result[0].employees,
+      schedule: result[0].schedules || undefined,
     };
-    this.workSchedules.set(id, schedule);
-    return schedule;
   }
 
-  async updateWorkSchedule(id: string, updates: Partial<InsertWorkSchedule>): Promise<WorkSchedule | undefined> {
-    const schedule = this.workSchedules.get(id);
-    if (!schedule) return undefined;
+  async getEmployeeByBarcode(barcode: string): Promise<EmployeeWithSchedule | undefined> {
+    const result = await db
+      .select()
+      .from(employees)
+      .leftJoin(schedules, eq(employees.scheduleId, schedules.id))
+      .where(eq(employees.barcode, barcode))
+      .limit(1);
 
-    const updatedSchedule = { ...schedule, ...updates };
-    this.workSchedules.set(id, updatedSchedule);
-    return updatedSchedule;
+    if (result.length === 0) return undefined;
+
+    return {
+      ...result[0].employees,
+      schedule: result[0].schedules || undefined,
+    };
   }
 
-  async deleteWorkSchedule(id: string): Promise<boolean> {
-    return this.workSchedules.delete(id);
+  async createEmployee(data: InsertEmployee): Promise<Employee> {
+    const result = await db.insert(employees).values(data).returning();
+    return result[0];
   }
 
-  // Attendance Record methods
-  async getAttendanceRecords(filters?: { 
-    employeeId?: string; 
-    startDate?: string; 
-    endDate?: string; 
-    department?: string;
-  }): Promise<AttendanceRecord[]> {
-    let records = Array.from(this.attendanceRecords.values());
+  async updateEmployee(id: number, data: Partial<InsertEmployee>): Promise<Employee> {
+    await db.update(employees).set(data).where(eq(employees.id, id));
+    const updated = await this.getEmployee(id);
+    if (!updated) throw new Error("Employee not found");
+    return updated;
+  }
 
-    if (filters) {
-      if (filters.employeeId) {
-        records = records.filter(record => record.employeeId === filters.employeeId);
-      }
-      if (filters.startDate) {
-        records = records.filter(record => record.date >= filters.startDate!);
-      }
-      if (filters.endDate) {
-        records = records.filter(record => record.date <= filters.endDate!);
-      }
+  async deleteEmployee(id: number): Promise<void> {
+    await db.update(employees).set({ isActive: false }).where(eq(employees.id, id));
+  }
+
+  // Attendance methods
+  async getAttendances(startDate?: string, endDate?: string, departmentFilter?: string): Promise<AttendanceWithEmployee[]> {
+    let query = db
+      .select()
+      .from(attendances)
+      .innerJoin(employees, eq(attendances.employeeId, employees.id))
+      .orderBy(desc(attendances.createdAt));
+
+    const conditions = [];
+    
+    if (startDate) {
+      conditions.push(gte(attendances.date, startDate));
+    }
+    
+    if (endDate) {
+      conditions.push(lte(attendances.date, endDate));
+    }
+    
+    if (departmentFilter && departmentFilter !== "all") {
+      conditions.push(eq(employees.department, departmentFilter));
     }
 
-    return records;
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    const result = await query;
+
+    return result.map((row) => ({
+      ...row.attendances,
+      employee: row.employees,
+    }));
   }
 
-  async getAttendanceRecord(id: string): Promise<AttendanceRecord | undefined> {
-    return this.attendanceRecords.get(id);
+  async getEmployeeAttendances(employeeId: number, startDate?: string, endDate?: string): Promise<Attendance[]> {
+    let query = db
+      .select()
+      .from(attendances)
+      .where(eq(attendances.employeeId, employeeId))
+      .orderBy(desc(attendances.date));
+
+    const conditions = [eq(attendances.employeeId, employeeId)];
+    
+    if (startDate) {
+      conditions.push(gte(attendances.date, startDate));
+    }
+    
+    if (endDate) {
+      conditions.push(lte(attendances.date, endDate));
+    }
+
+    if (conditions.length > 1) {
+      query = query.where(and(...conditions));
+    }
+
+    return await query;
   }
 
-  async getTodayAttendanceRecord(employeeId: string): Promise<AttendanceRecord | undefined> {
+  async getTodayAttendance(employeeId: number): Promise<Attendance | undefined> {
     const today = new Date().toISOString().split('T')[0];
-    return Array.from(this.attendanceRecords.values()).find(
-      record => record.employeeId === employeeId && record.date === today
-    );
+    const result = await db
+      .select()
+      .from(attendances)
+      .where(and(eq(attendances.employeeId, employeeId), eq(attendances.date, today)))
+      .limit(1);
+
+    return result[0];
   }
 
-  async createAttendanceRecord(insertRecord: InsertAttendanceRecord): Promise<AttendanceRecord> {
-    const id = randomUUID();
-    const record: AttendanceRecord = {
-      ...insertRecord,
-      id,
-      createdAt: new Date(),
-    };
-    this.attendanceRecords.set(id, record);
-    return record;
+  async createAttendance(data: InsertAttendance): Promise<Attendance> {
+    const result = await db.insert(attendances).values(data).returning();
+    return result[0];
   }
 
-  async updateAttendanceRecord(id: string, updates: Partial<InsertAttendanceRecord>): Promise<AttendanceRecord | undefined> {
-    const record = this.attendanceRecords.get(id);
-    if (!record) return undefined;
-
-    const updatedRecord = { ...record, ...updates };
-    this.attendanceRecords.set(id, updatedRecord);
-    return updatedRecord;
+  async updateAttendance(id: number, data: Partial<InsertAttendance>): Promise<Attendance> {
+    await db.update(attendances).set(data).where(eq(attendances.id, id));
+    const result = await db.select().from(attendances).where(eq(attendances.id, id)).limit(1);
+    if (!result[0]) throw new Error("Attendance not found");
+    return result[0];
   }
 
-  // Credential Settings methods
-  async getCredentialSettings(): Promise<CredentialSettings | undefined> {
-    return this.credentialSettings;
+  async checkIn(employeeId: number): Promise<Attendance> {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    
+    // Check if there's already an attendance record for today
+    let attendance = await this.getTodayAttendance(employeeId);
+    
+    if (!attendance) {
+      // Create new attendance record
+      attendance = await this.createAttendance({
+        employeeId,
+        checkIn: now,
+        date: today,
+        status: "pending",
+      });
+    } else {
+      // Update existing record
+      attendance = await this.updateAttendance(attendance.id, {
+        checkIn: now,
+      });
+    }
+    
+    return attendance;
   }
 
-  async updateCredentialSettings(settings: InsertCredentialSettings): Promise<CredentialSettings> {
-    const updated: CredentialSettings = {
-      ...settings,
-      id: this.credentialSettings?.id || randomUUID(),
-      updatedAt: new Date(),
-    };
-    this.credentialSettings = updated;
-    return updated;
+  async checkOut(employeeId: number): Promise<Attendance> {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    
+    let attendance = await this.getTodayAttendance(employeeId);
+    
+    if (!attendance || !attendance.checkIn) {
+      throw new Error("No check-in found for today");
+    }
+    
+    // Calculate total hours
+    const checkInTime = new Date(attendance.checkIn);
+    const totalMilliseconds = now.getTime() - checkInTime.getTime();
+    const totalHours = totalMilliseconds / (1000 * 60 * 60);
+    
+    attendance = await this.updateAttendance(attendance.id, {
+      checkOut: now,
+      totalHours: Math.round(totalHours * 100) / 100,
+      status: "complete",
+    });
+    
+    return attendance;
   }
 
-  // Department methods
-  async getDepartments(): Promise<Department[]> {
-    return Array.from(this.departments.values());
-  }
-
-  async getDepartment(id: string): Promise<Department | undefined> {
-    return this.departments.get(id);
-  }
-
-  async createDepartment(insertDepartment: InsertDepartment): Promise<Department> {
-    const id = randomUUID();
-    const department: Department = {
-      ...insertDepartment,
-      id,
-      createdAt: new Date(),
-    };
-    this.departments.set(id, department);
-    return department;
-  }
-
-  async updateDepartment(id: string, updates: Partial<InsertDepartment>): Promise<Department | undefined> {
-    const department = this.departments.get(id);
-    if (!department) return undefined;
-
-    const updatedDepartment = { ...department, ...updates };
-    this.departments.set(id, updatedDepartment);
-    return updatedDepartment;
-  }
-
-  async deleteDepartment(id: string): Promise<boolean> {
-    return this.departments.delete(id);
-  }
-
-  // System Settings methods
-  async getSystemSettings(): Promise<SystemSettings | undefined> {
-    return this.systemSettings;
-  }
-
-  async updateSystemSettings(settings: InsertSystemSettings): Promise<SystemSettings> {
-    const updated: SystemSettings = {
-      ...settings,
-      id: this.systemSettings?.id || randomUUID(),
-      updatedAt: new Date(),
-    };
-    this.systemSettings = updated;
-    return updated;
+  async getAttendanceReport(startDate: string, endDate: string, departmentFilter?: string): Promise<AttendanceReport[]> {
+    const attendanceData = await this.getAttendances(startDate, endDate, departmentFilter);
+    
+    const reportMap = new Map<string, AttendanceReport>();
+    
+    attendanceData.forEach((attendance) => {
+      const key = `${attendance.employee.employeeId}-${attendance.date}`;
+      
+      if (!reportMap.has(key)) {
+        reportMap.set(key, {
+          employeeId: attendance.employee.employeeId,
+          fullName: attendance.employee.fullName,
+          department: attendance.employee.department,
+          checkIns: [],
+          checkOuts: [],
+          totalHours: 0,
+          overtimeHours: 0,
+          date: attendance.date,
+        });
+      }
+      
+      const report = reportMap.get(key)!;
+      
+      if (attendance.checkIn) {
+        report.checkIns.push(new Date(attendance.checkIn).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }));
+      }
+      
+      if (attendance.checkOut) {
+        report.checkOuts.push(new Date(attendance.checkOut).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }));
+      }
+      
+      report.totalHours += attendance.totalHours || 0;
+      report.overtimeHours += attendance.overtimeHours || 0;
+    });
+    
+    return Array.from(reportMap.values());
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new SqliteStorage();

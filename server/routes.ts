@@ -1,398 +1,396 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { 
-  insertEmployeeSchema, 
-  insertWorkScheduleSchema, 
-  insertAttendanceRecordSchema,
-  insertCredentialSettingsSchema,
-  insertSystemSettingsSchema,
-  insertDepartmentSchema
-} from "@shared/schema";
+import { insertEmployeeSchema, insertScheduleSchema, insertCompanySchema } from "@shared/schema";
 import multer from "multer";
-import path from "path";
-import { promises as fs } from "fs";
+import ExcelJS from "exceljs";
+import JsBarcode from "jsbarcode";
+import { Canvas } from "canvas";
 
-// Configure multer for file uploads
-const upload = multer({
-  dest: 'uploads/',
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'), false);
-    }
-  },
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Company routes
+  app.get("/api/company", async (req, res) => {
+    try {
+      const company = await storage.getCompany();
+      res.json(company);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get company information" });
+    }
+  });
+
+  app.put("/api/company", upload.single("logo"), async (req, res) => {
+    try {
+      const data = req.body;
+      if (req.file) {
+        data.logo = req.file.buffer;
+      }
+      const company = await storage.updateCompany(data);
+      res.json(company);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update company information" });
+    }
+  });
+
+  // Schedule routes
+  app.get("/api/schedules", async (req, res) => {
+    try {
+      const schedules = await storage.getSchedules();
+      res.json(schedules);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get schedules" });
+    }
+  });
+
+  app.get("/api/schedules/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const schedule = await storage.getSchedule(id);
+      if (!schedule) {
+        return res.status(404).json({ message: "Schedule not found" });
+      }
+      res.json(schedule);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get schedule" });
+    }
+  });
+
+  app.post("/api/schedules", async (req, res) => {
+    try {
+      const validatedData = insertScheduleSchema.parse(req.body);
+      const schedule = await storage.createSchedule(validatedData);
+      res.status(201).json(schedule);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid schedule data" });
+    }
+  });
+
+  app.put("/api/schedules/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const schedule = await storage.updateSchedule(id, req.body);
+      res.json(schedule);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update schedule" });
+    }
+  });
+
+  app.delete("/api/schedules/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteSchedule(id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete schedule" });
+    }
+  });
+
   // Employee routes
   app.get("/api/employees", async (req, res) => {
     try {
       const employees = await storage.getEmployees();
       res.json(employees);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch employees" });
+      res.status(500).json({ message: "Failed to get employees" });
     }
   });
 
   app.get("/api/employees/:id", async (req, res) => {
     try {
-      const employee = await storage.getEmployee(req.params.id);
+      const id = parseInt(req.params.id);
+      const employee = await storage.getEmployee(id);
       if (!employee) {
         return res.status(404).json({ message: "Employee not found" });
       }
       res.json(employee);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch employee" });
+      res.status(500).json({ message: "Failed to get employee" });
     }
   });
 
-  app.post("/api/employees", upload.single('photo'), async (req, res) => {
+  app.get("/api/employees/by-barcode/:barcode", async (req, res) => {
     try {
-      // Parse and clean form data
-      const formData = { ...req.body };
-      
-      // Handle boolean conversion for FormData strings
-      if (formData.isActive === "true") formData.isActive = true;
-      if (formData.isActive === "false") formData.isActive = false;
-      
-      // Remove empty strings and undefined values
-      Object.keys(formData).forEach(key => {
-        if (formData[key] === "" || formData[key] === "undefined") {
-          delete formData[key];
-        }
-      });
-      
-      // Validate with schema
-      const data = insertEmployeeSchema.parse(formData);
-      
-      // Handle photo upload
-      if (req.file) {
-        const photoUrl = `/uploads/${req.file.filename}`;
-        data.photoUrl = photoUrl;
+      const barcode = req.params.barcode;
+      const employee = await storage.getEmployeeByBarcode(barcode);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
       }
-
-      // Generate barcode data if not provided
-      if (!data.barcodeData) {
-        data.barcodeData = data.employeeId;
-      }
-
-      const employee = await storage.createEmployee(data);
-      res.status(201).json(employee);
+      res.json(employee);
     } catch (error) {
-      res.status(400).json({ message: "Invalid employee data", error: error.message });
+      res.status(500).json({ message: "Failed to get employee by barcode" });
     }
   });
 
-  app.put("/api/employees/:id", upload.single('photo'), async (req, res) => {
+  app.post("/api/employees", upload.single("photo"), async (req, res) => {
     try {
       const data = req.body;
-      
-      // Handle photo upload
       if (req.file) {
-        const photoUrl = `/uploads/${req.file.filename}`;
-        data.photoUrl = photoUrl;
+        data.photo = req.file.buffer;
+      }
+      
+      // Generate barcode if not provided
+      if (!data.barcode) {
+        data.barcode = data.employeeId;
       }
 
-      const employee = await storage.updateEmployee(req.params.id, data);
-      if (!employee) {
-        return res.status(404).json({ message: "Employee not found" });
+      const validatedData = insertEmployeeSchema.parse(data);
+      const employee = await storage.createEmployee(validatedData);
+      res.status(201).json(employee);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid employee data" });
+    }
+  });
+
+  app.put("/api/employees/:id", upload.single("photo"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const data = req.body;
+      if (req.file) {
+        data.photo = req.file.buffer;
       }
+      const employee = await storage.updateEmployee(id, data);
       res.json(employee);
     } catch (error) {
-      res.status(400).json({ message: "Failed to update employee" });
+      res.status(500).json({ message: "Failed to update employee" });
     }
   });
 
   app.delete("/api/employees/:id", async (req, res) => {
     try {
-      const deleted = await storage.deleteEmployee(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ message: "Employee not found" });
-      }
+      const id = parseInt(req.params.id);
+      await storage.deleteEmployee(id);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Failed to delete employee" });
     }
   });
 
-  // Work Schedule routes
-  app.get("/api/work-schedules", async (req, res) => {
-    try {
-      const schedules = await storage.getWorkSchedules();
-      res.json(schedules);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch work schedules" });
-    }
-  });
-
-  app.post("/api/work-schedules", async (req, res) => {
-    try {
-      const data = insertWorkScheduleSchema.parse(req.body);
-      const schedule = await storage.createWorkSchedule(data);
-      res.status(201).json(schedule);
-    } catch (error) {
-      res.status(400).json({ message: "Invalid work schedule data" });
-    }
-  });
-
-  app.put("/api/work-schedules/:id", async (req, res) => {
-    try {
-      const schedule = await storage.updateWorkSchedule(req.params.id, req.body);
-      if (!schedule) {
-        return res.status(404).json({ message: "Work schedule not found" });
-      }
-      res.json(schedule);
-    } catch (error) {
-      res.status(400).json({ message: "Failed to update work schedule" });
-    }
-  });
-
-  app.delete("/api/work-schedules/:id", async (req, res) => {
-    try {
-      const deleted = await storage.deleteWorkSchedule(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ message: "Work schedule not found" });
-      }
-      res.status(204).send();
-    } catch (error) {
-      res.status(500).json({ message: "Failed to delete work schedule" });
-    }
-  });
-
   // Attendance routes
-  app.get("/api/attendance", async (req, res) => {
+  app.get("/api/attendances", async (req, res) => {
     try {
-      const { employeeId, startDate, endDate, department } = req.query;
-      const records = await storage.getAttendanceRecords({
-        employeeId: employeeId as string,
-        startDate: startDate as string,
-        endDate: endDate as string,
-        department: department as string,
-      });
-      res.json(records);
+      const { startDate, endDate, department } = req.query;
+      const attendances = await storage.getAttendances(
+        startDate as string,
+        endDate as string,
+        department as string
+      );
+      res.json(attendances);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch attendance records" });
+      res.status(500).json({ message: "Failed to get attendances" });
     }
   });
 
-  app.post("/api/attendance/check-in", async (req, res) => {
+  app.get("/api/employees/:id/attendances", async (req, res) => {
     try {
-      const { barcodeData } = req.body;
-      
-      if (!barcodeData) {
-        return res.status(400).json({ message: "Barcode data is required" });
-      }
+      const id = parseInt(req.params.id);
+      const { startDate, endDate } = req.query;
+      const attendances = await storage.getEmployeeAttendances(
+        id,
+        startDate as string,
+        endDate as string
+      );
+      res.json(attendances);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get employee attendances" });
+    }
+  });
 
-      // Find employee by barcode
-      const employee = await storage.getEmployeeByBarcodeData(barcodeData);
+  app.post("/api/checkin", async (req, res) => {
+    try {
+      const { barcode, employeeId } = req.body;
+      
+      let employee;
+      if (barcode) {
+        employee = await storage.getEmployeeByBarcode(barcode);
+      } else if (employeeId) {
+        employee = await storage.getEmployeeByEmployeeId(employeeId);
+      }
+      
       if (!employee) {
         return res.status(404).json({ message: "Employee not found" });
       }
 
+      // Check for recent check-in (within 1 minute)
       const today = new Date().toISOString().split('T')[0];
+      const existingAttendance = await storage.getTodayAttendance(employee.id);
       
-      // Check if there's already a record for today
-      let attendanceRecord = await storage.getTodayAttendanceRecord(employee.id);
-      
-      if (!attendanceRecord) {
-        // Create new attendance record
-        attendanceRecord = await storage.createAttendanceRecord({
-          employeeId: employee.id,
-          checkInTime: new Date(),
-          checkOutTime: null,
-          breakfastOutTime: null,
-          breakfastInTime: null,
-          lunchOutTime: null,
-          lunchInTime: null,
-          totalHours: null,
-          overtimeHours: null,
-          date: today,
-        });
-        res.json({ type: "check-in", record: attendanceRecord, employee });
-      } else if (!attendanceRecord.checkOutTime) {
-        // Update with check-out time
-        const checkOutTime = new Date();
-        const totalMinutes = Math.floor((checkOutTime.getTime() - attendanceRecord.checkInTime!.getTime()) / (1000 * 60));
+      if (existingAttendance?.checkIn) {
+        const lastCheckIn = new Date(existingAttendance.checkIn);
+        const now = new Date();
+        const diffMinutes = (now.getTime() - lastCheckIn.getTime()) / (1000 * 60);
         
-        attendanceRecord = await storage.updateAttendanceRecord(attendanceRecord.id, {
-          checkOutTime,
-          totalHours: totalMinutes,
-        });
-        
-        res.json({ type: "check-out", record: attendanceRecord, employee });
-      } else {
-        res.status(400).json({ message: "Employee has already checked out today" });
+        if (diffMinutes < 1) {
+          return res.status(400).json({ 
+            message: "Check-in bloqueado. Espera 1 minuto antes de volver a registrar.",
+            cooldown: true 
+          });
+        }
       }
+
+      const attendance = await storage.checkIn(employee.id);
+      
+      // Calculate hours worked today
+      let hoursWorked = 0;
+      if (attendance.checkIn && attendance.checkOut) {
+        hoursWorked = attendance.totalHours || 0;
+      } else if (attendance.checkIn) {
+        const checkInTime = new Date(attendance.checkIn);
+        const now = new Date();
+        hoursWorked = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+      }
+
+      res.json({
+        success: true,
+        employee,
+        attendance,
+        hoursWorked: Math.round(hoursWorked * 100) / 100,
+      });
     } catch (error) {
-      res.status(500).json({ message: "Failed to process check-in/out" });
+      res.status(500).json({ message: "Failed to check in" });
     }
   });
 
-  app.get("/api/attendance/recent", async (req, res) => {
+  app.post("/api/checkout", async (req, res) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const records = await storage.getAttendanceRecords({
-        startDate: today,
-        endDate: today,
-      });
+      const { barcode, employeeId } = req.body;
       
-      // Get employee details for each record
-      const recentActivity = await Promise.all(
-        records.slice(-10).map(async (record) => {
-          const employee = await storage.getEmployee(record.employeeId);
-          return { record, employee };
-        })
+      let employee;
+      if (barcode) {
+        employee = await storage.getEmployeeByBarcode(barcode);
+      } else if (employeeId) {
+        employee = await storage.getEmployeeByEmployeeId(employeeId);
+      }
+      
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      const attendance = await storage.checkOut(employee.id);
+      
+      res.json({
+        success: true,
+        employee,
+        attendance,
+        hoursWorked: attendance.totalHours || 0,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to check out" });
+    }
+  });
+
+  // Reports
+  app.get("/api/reports/attendance", async (req, res) => {
+    try {
+      const { startDate, endDate, department } = req.query;
+      
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: "Start date and end date are required" });
+      }
+
+      const report = await storage.getAttendanceReport(
+        startDate as string,
+        endDate as string,
+        department as string
       );
       
-      res.json(recentActivity.reverse());
+      res.json(report);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch recent activity" });
+      res.status(500).json({ message: "Failed to generate attendance report" });
     }
   });
 
-  // Credential settings routes
-  app.get("/api/credential-settings", async (req, res) => {
+  app.get("/api/reports/attendance/excel", async (req, res) => {
     try {
-      const settings = await storage.getCredentialSettings();
-      res.json(settings);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch credential settings" });
-    }
-  });
-
-  app.put("/api/credential-settings", upload.single('logo'), async (req, res) => {
-    try {
-      const data = req.body;
+      const { startDate, endDate, department } = req.query;
       
-      // Handle logo upload
-      if (req.file) {
-        const logoUrl = `/uploads/${req.file.filename}`;
-        data.logoUrl = logoUrl;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ message: "Start date and end date are required" });
       }
 
-      const settings = await storage.updateCredentialSettings(data);
-      res.json(settings);
-    } catch (error) {
-      res.status(400).json({ message: "Failed to update credential settings" });
-    }
-  });
-
-  // Department routes
-  app.get("/api/departments", async (req, res) => {
-    try {
-      const departments = await storage.getDepartments();
-      res.json(departments);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch departments" });
-    }
-  });
-
-  app.post("/api/departments", async (req, res) => {
-    try {
-      const data = insertDepartmentSchema.parse(req.body);
-      const department = await storage.createDepartment(data);
-      res.status(201).json(department);
-    } catch (error) {
-      res.status(400).json({ message: "Invalid department data" });
-    }
-  });
-
-  app.put("/api/departments/:id", async (req, res) => {
-    try {
-      const department = await storage.updateDepartment(req.params.id, req.body);
-      if (!department) {
-        return res.status(404).json({ message: "Department not found" });
-      }
-      res.json(department);
-    } catch (error) {
-      res.status(400).json({ message: "Failed to update department" });
-    }
-  });
-
-  app.delete("/api/departments/:id", async (req, res) => {
-    try {
-      const deleted = await storage.deleteDepartment(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ message: "Department not found" });
-      }
-      res.status(204).send();
-    } catch (error) {
-      res.status(500).json({ message: "Failed to delete department" });
-    }
-  });
-
-  // System settings routes
-  app.get("/api/system-settings", async (req, res) => {
-    try {
-      const settings = await storage.getSystemSettings();
-      res.json(settings);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch system settings" });
-    }
-  });
-
-  app.put("/api/system-settings", async (req, res) => {
-    try {
-      const settings = await storage.updateSystemSettings(req.body);
-      res.json(settings);
-    } catch (error) {
-      res.status(400).json({ message: "Failed to update system settings" });
-    }
-  });
-
-  // Reports routes
-  app.post("/api/reports/export", async (req, res) => {
-    try {
-      const { format, period, department, startDate, endDate } = req.body;
-      
-      // Get attendance records based on filters
-      const records = await storage.getAttendanceRecords({
-        startDate,
-        endDate,
-        department,
-      });
-
-      // Get employee details for each record
-      const reportData = await Promise.all(
-        records.map(async (record) => {
-          const employee = await storage.getEmployee(record.employeeId);
-          return {
-            employeeId: employee?.employeeId,
-            fullName: employee?.fullName,
-            department: employee?.department,
-            date: record.date,
-            checkIn: record.checkInTime?.toISOString(),
-            checkOut: record.checkOutTime?.toISOString(),
-            totalHours: record.totalHours ? Math.floor(record.totalHours / 60) + ':' + (record.totalHours % 60).toString().padStart(2, '0') : '',
-            overtimeHours: record.overtimeHours ? Math.floor(record.overtimeHours / 60) + ':' + (record.overtimeHours % 60).toString().padStart(2, '0') : '',
-          };
-        })
+      const report = await storage.getAttendanceReport(
+        startDate as string,
+        endDate as string,
+        department as string
       );
 
-      if (format === 'xlsx') {
-        // For Excel export, we'll return the data and let the frontend handle the file generation
-        res.json({ data: reportData, filename: `attendance_report_${Date.now()}.xlsx` });
-      } else {
-        res.status(400).json({ message: "Unsupported format" });
-      }
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Reporte de Asistencias");
+
+      // Add headers
+      worksheet.columns = [
+        { header: "ID Empleado", key: "employeeId", width: 15 },
+        { header: "Nombre Completo", key: "fullName", width: 30 },
+        { header: "Departamento", key: "department", width: 20 },
+        { header: "Fecha", key: "date", width: 12 },
+        { header: "Entradas", key: "checkIns", width: 20 },
+        { header: "Salidas", key: "checkOuts", width: 20 },
+        { header: "Horas Trabajadas", key: "totalHours", width: 18 },
+        { header: "Horas Extra", key: "overtimeHours", width: 15 },
+        { header: "Firma", key: "signature", width: 25 },
+      ];
+
+      // Add data
+      report.forEach((row) => {
+        worksheet.addRow({
+          employeeId: row.employeeId,
+          fullName: row.fullName,
+          department: row.department,
+          date: row.date,
+          checkIns: row.checkIns.join(", "),
+          checkOuts: row.checkOuts.join(", "),
+          totalHours: row.totalHours,
+          overtimeHours: row.overtimeHours,
+          signature: "_".repeat(20),
+        });
+      });
+
+      // Style the header row
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.getRow(1).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFE6E6FA" },
+      };
+
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="reporte-asistencias-${startDate}-${endDate}.xlsx"`
+      );
+
+      await workbook.xlsx.write(res);
+      res.end();
     } catch (error) {
-      res.status(500).json({ message: "Failed to generate report" });
+      res.status(500).json({ message: "Failed to generate Excel report" });
     }
   });
 
-  // Serve uploaded files
-  app.use('/uploads', async (req, res) => {
+  // Barcode generation
+  app.get("/api/barcode/:text", async (req, res) => {
     try {
-      const filePath = path.join(process.cwd(), 'uploads', req.path);
-      await fs.access(filePath);
-      res.sendFile(filePath);
+      const text = req.params.text;
+      const canvas = new Canvas(200, 50, "svg");
+      
+      JsBarcode(canvas, text, {
+        format: "CODE128",
+        width: 2,
+        height: 50,
+        displayValue: true,
+        fontSize: 12,
+        textMargin: 5,
+      });
+
+      res.setHeader("Content-Type", "image/svg+xml");
+      res.send(canvas.toBuffer());
     } catch (error) {
-      res.status(404).json({ message: "File not found" });
+      res.status(500).json({ message: "Failed to generate barcode" });
     }
   });
 

@@ -1,6 +1,6 @@
 # Overview
 
-TimeCheck Pro is a tablet-optimized attendance management system for employee check-in/check-out tracking. The application enables automatic barcode scanning via camera or physical USB/Bluetooth scanners to record employee attendance instantly, manage work schedules, generate employee credentials, and export attendance reports. It's designed as a full-stack web application with a React frontend and Express backend, optimized for real-world deployment scenarios.
+This is a comprehensive employee attendance management system designed specifically for tablet interfaces. The application serves as a check-in/check-out system that allows employees to register their attendance by scanning barcodes from their ID cards using either a device camera or physical barcode scanner. The system provides complete employee management, schedule configuration, attendance tracking, and reporting capabilities with a modern React frontend and Express backend architecture.
 
 # User Preferences
 
@@ -9,90 +9,67 @@ Preferred communication style: Simple, everyday language.
 # System Architecture
 
 ## Frontend Architecture
-- **Framework**: React with TypeScript using Vite for build tooling
-- **UI Library**: Shadcn/ui components built on Radix UI primitives
-- **Styling**: Tailwind CSS with custom CSS variables for theming
-- **State Management**: React Query (TanStack Query) for server state and caching
-- **Routing**: Wouter for client-side routing
-- **Form Handling**: React Hook Form with Zod schema validation
+- **Framework**: React 18 with TypeScript for type safety and modern development
+- **UI Components**: Radix UI primitives with shadcn/ui component library for consistent, accessible design
+- **Styling**: Tailwind CSS with CSS variables for theming and responsive design optimized for tablet interfaces
+- **State Management**: TanStack Query (React Query) for server state management and caching
+- **Routing**: Wouter for lightweight client-side routing
+- **Build Tool**: Vite for fast development and optimized production builds
+- **Form Handling**: React Hook Form with Zod validation for type-safe form management
 
 ## Backend Architecture
-- **Runtime**: Node.js with Express.js framework
-- **Language**: TypeScript with ES modules
-- **Database ORM**: Drizzle ORM for type-safe database operations
-- **Schema Validation**: Zod schemas shared between frontend and backend
-- **File Handling**: Multer for image uploads (employee photos)
-- **Development**: Hot reload with Vite integration in development mode
+- **Runtime**: Node.js with Express.js framework for REST API endpoints
+- **Database**: SQLite with Drizzle ORM for type-safe database operations and schema management
+- **File Processing**: Multer for handling file uploads (employee photos, company logos)
+- **Barcode Generation**: Canvas and JsBarcode for generating employee ID barcodes
+- **Excel Export**: ExcelJS for generating attendance reports in spreadsheet format
+- **Development**: TSX for TypeScript execution and hot reloading
 
-## Data Storage
-- **Database**: PostgreSQL with Neon serverless connection
-- **Schema Design**: 
-  - Employees table with barcode data and work schedule references
-  - Work schedules with configurable time slots (entry, breaks, lunch, exit)
-  - Attendance records with timestamp tracking for all events
-  - Credential and system settings for customization
-- **Migrations**: Drizzle Kit for database schema management
+## Data Layer
+- **ORM**: Drizzle ORM with SQLite dialect for type-safe database queries
+- **Schema Management**: Drizzle Kit for database migrations and schema synchronization
+- **Database Structure**: Four main tables (companies, schedules, employees, attendances) with proper foreign key relationships
+- **File Storage**: Binary data stored directly in database (photos, logos) with memory-based file uploads
 
-## Key Features
-- **Barcode Scanning**: Camera-based and physical scanner support for employee identification
-- **Automatic Attendance Registration**: Physical scanners automatically register attendance without user interaction
-- **Attendance Tracking**: Complete check-in/check-out flow with break and lunch time tracking
-- **Employee Management**: CRUD operations with photo upload and department organization
-- **Department Management**: Full CRUD operations for organizational departments
-- **Work Schedule Management**: Configurable schedules with overtime support
-- **Credential Generation**: Customizable employee ID card creation with branding
-- **Reporting**: Excel export functionality with filtering options
-- **Tablet Optimization**: Responsive design optimized for tablet interfaces
+## Key Features Architecture
+- **Barcode Scanning**: Browser camera API integration with fallback to manual input
+- **Tablet Optimization**: Touch-friendly interface with responsive design and gesture support
+- **Real-time Updates**: Polling-based data refresh for attendance status updates
+- **Photo Management**: Image upload, processing, and display with preview functionality
+- **Schedule Management**: Flexible work schedule configuration with break times and overtime settings
+- **Reporting System**: Dynamic date range filtering with Excel export capabilities
 
 ## Authentication & Security
-- **Session Management**: Express sessions with PostgreSQL storage
-- **File Upload Security**: Multer with file type validation and size limits
-- **Input Validation**: Zod schemas for all data inputs
-- **CORS**: Configured for cross-origin requests in development
+- **Session Management**: Express sessions with PostgreSQL session store configuration
+- **File Upload Security**: Size limits and type validation for uploaded files
+- **Input Validation**: Zod schemas for both client and server-side validation
+- **Error Handling**: Comprehensive error boundaries and API error responses
 
 # External Dependencies
 
-## Core Framework Dependencies
-- **React & TypeScript**: Frontend framework with type safety
-- **Express.js**: Backend web framework
-- **Vite**: Frontend build tool and development server
+## Database Services
+- **SQLite**: Local file-based database for data persistence
+- **Better SQLite3**: High-performance SQLite driver for Node.js
+- **Neon Database**: PostgreSQL serverless database service (configured but not actively used in current SQLite implementation)
 
-## Database & ORM
-- **@neondatabase/serverless**: PostgreSQL serverless database connection
-- **drizzle-orm**: Type-safe ORM for database operations
-- **drizzle-kit**: Database migration and schema management
-- **connect-pg-simple**: PostgreSQL session store for Express
+## UI & Design Libraries
+- **Radix UI**: Comprehensive set of accessible, unstyled UI primitives
+- **Tailwind CSS**: Utility-first CSS framework for responsive design
+- **Lucide React**: Consistent icon library for UI elements
+- **Class Variance Authority**: Type-safe utility for component variants
+- **SweetAlert2**: Enhanced modal dialogs for user feedback
 
-## UI Components & Styling
-- **@radix-ui/***: Headless UI components for accessibility
-- **tailwindcss**: Utility-first CSS framework
-- **class-variance-authority**: Component variant management
-- **lucide-react**: Icon library
+## Development & Build Tools
+- **Vite**: Modern build tool with HMR and optimized bundling
+- **TypeScript**: Static type checking and enhanced developer experience
+- **Replit Integration**: Development environment plugins and runtime error overlay
 
-## Form Handling & Validation
-- **react-hook-form**: Form state management
-- **@hookform/resolvers**: Form validation resolvers
-- **zod**: Schema validation library
-- **drizzle-zod**: Integration between Drizzle and Zod
+## File Processing Libraries
+- **Canvas**: Server-side canvas implementation for barcode generation
+- **ExcelJS**: Excel file generation and manipulation
+- **JsBarcode**: Barcode generation library for employee ID cards
 
-## State Management & Data Fetching
-- **@tanstack/react-query**: Server state management and caching
-- **wouter**: Lightweight client-side routing
-
-## File Handling
-- **multer**: File upload middleware for Express
-- **@types/multer**: TypeScript definitions for Multer
-
-## Development Tools
-- **tsx**: TypeScript execution for Node.js
-- **esbuild**: Fast JavaScript bundler for production builds
-- **@replit/vite-plugin-runtime-error-modal**: Development error overlay
-- **@replit/vite-plugin-cartographer**: Replit development integration
-
-## Date & Time
-- **date-fns**: Modern date utility library for JavaScript
-
-## Additional Utilities
-- **ws**: WebSocket library for Neon database connections
-- **clsx**: Utility for constructing className strings
-- **cmdk**: Command menu component
+## Validation & Forms
+- **Zod**: TypeScript-first schema validation library
+- **React Hook Form**: Performant forms library with minimal re-renders
+- **Hookform Resolvers**: Integration between React Hook Form and Zod validation

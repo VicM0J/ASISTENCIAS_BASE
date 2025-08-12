@@ -1,22 +1,25 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search, FileSpreadsheet, Download, Calendar } from "lucide-react";
+import { formatTime, getWeekRange, getMonthRange, getYearRange } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { exportToExcel } from "@/lib/excel-utils";
-import { Download, FileSpreadsheet, Eye } from "lucide-react";
 
 export default function Reports() {
-  const [period, setPeriod] = useState("week");
-  const [department, setDepartment] = useState("all");
-  const [format, setFormat] = useState("xlsx");
-  const [includeOvertime, setIncludeOvertime] = useState(true);
-  const [includeBreaks, setIncludeBreaks] = useState(true);
-  const [includeSignature, setIncludeSignature] = useState(false);
+  const [startDate, setStartDate] = useState(() => getWeekRange().start);
+  const [endDate, setEndDate] = useState(() => getWeekRange().end);
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
+
+  const { data: reportData, isLoading, refetch } = useQuery({
+    queryKey: ["/api/reports/attendance", startDate, endDate, departmentFilter],
+    enabled: false, // Only fetch when explicitly requested
+  });
 
   const { data: employees } = useQuery({
     queryKey: ["/api/employees"],
@@ -24,230 +27,355 @@ export default function Reports() {
 
   const departments = [...new Set(employees?.map((emp: any) => emp.department) || [])];
 
-  const generateReportMutation = useMutation({
-    mutationFn: async () => {
-      const startDate = getStartDate(period);
-      const endDate = new Date().toISOString().split('T')[0];
-      
-      const response = await fetch("/api/reports/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          format,
-          period,
-          department: department === "all" ? undefined : department,
-          startDate,
-          endDate,
-          includeOvertime,
-          includeBreaks,
-          includeSignature,
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error("Failed to generate report");
-      }
-      
-      return response.json();
-    },
-    onSuccess: (data) => {
-      if (format === "xlsx") {
-        exportToExcel(data.data, data.filename);
-        toast({
-          title: "Reporte generado",
-          description: "El archivo Excel se ha descargado exitosamente",
-        });
-      }
-    },
-    onError: () => {
+  const generateReport = async () => {
+    if (!startDate || !endDate) {
       toast({
         title: "Error",
-        description: "No se pudo generar el reporte",
+        description: "Por favor selecciona las fechas de inicio y fin.",
         variant: "destructive",
       });
-    },
-  });
+      return;
+    }
 
-  const getStartDate = (period: string) => {
-    const today = new Date();
-    switch (period) {
-      case "week":
-        const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-        return weekAgo.toISOString().split('T')[0];
-      case "month":
-        return new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-      case "year":
-        return new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0];
-      default:
-        return today.toISOString().split('T')[0];
+    if (new Date(startDate) > new Date(endDate)) {
+      toast({
+        title: "Error",
+        description: "La fecha de inicio no puede ser posterior a la fecha de fin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      await refetch();
+      toast({
+        title: "Reporte Generado",
+        description: "El reporte se ha generado exitosamente.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo generar el reporte. Intenta nuevamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
     }
   };
 
-  const recentReports = [
-    {
-      name: "Asistencias_Enero_2024.xlsx",
-      period: "Enero 2024",
-      department: "Todos",
-      date: "15/01/2024 14:30",
-    },
-    {
-      name: "Asistencias_Semanal_S03.xlsx",
-      period: "Semana 3",
-      department: "Ventas",
-      date: "12/01/2024 09:15",
-    },
-  ];
+  const exportToExcel = async () => {
+    if (!reportData || reportData.length === 0) {
+      toast({
+        title: "Error",
+        description: "No hay datos para exportar. Genera un reporte primero.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const params = new URLSearchParams({
+        startDate,
+        endDate,
+        ...(departmentFilter !== "all" && { department: departmentFilter }),
+      });
+
+      const response = await fetch(`/api/reports/attendance/excel?${params}`);
+      
+      if (!response.ok) {
+        throw new Error("Failed to export report");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `reporte-asistencias-${startDate}-${endDate}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Exportación Exitosa",
+        description: "El archivo Excel se ha descargado correctamente.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo exportar el reporte. Intenta nuevamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const setQuickDateRange = (range: string) => {
+    let dateRange;
+    switch (range) {
+      case "week":
+        dateRange = getWeekRange();
+        break;
+      case "month":
+        dateRange = getMonthRange();
+        break;
+      case "year":
+        dateRange = getYearRange();
+        break;
+      default:
+        return;
+    }
+    setStartDate(dateRange.start);
+    setEndDate(dateRange.end);
+  };
 
   return (
-    <div className="p-8">
+    <div className="p-6">
       <div className="max-w-6xl mx-auto">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-slate-900 mb-2">Reportes Excel</h2>
-          <p className="text-slate-600">Genera reportes detallados de asistencias en formato Excel</p>
-        </div>
-
-        {/* Report Configuration */}
-        <Card className="mb-8">
+        <Card className="tablet-card shadow-sm border border-gray-200">
           <CardContent className="p-8">
-            <h3 className="text-xl font-semibold text-slate-900 mb-6">Configuración de Reporte</h3>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">
+              Reportes de Asistencias
+            </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div>
-                <Label>Período</Label>
-                <Select value={period} onValueChange={setPeriod}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="week">Última semana</SelectItem>
-                    <SelectItem value="month">Mes actual</SelectItem>
-                    <SelectItem value="prev-month">Mes anterior</SelectItem>
-                    <SelectItem value="year">Año actual</SelectItem>
-                    <SelectItem value="custom">Personalizado</SelectItem>
-                  </SelectContent>
-                </Select>
+            {/* Report Filters */}
+            <div className="space-y-6 mb-8">
+              {/* Quick Date Range Buttons */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setQuickDateRange("week")}
+                  data-testid="quick-week"
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Esta Semana
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setQuickDateRange("month")}
+                  data-testid="quick-month"
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Este Mes
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setQuickDateRange("year")}
+                  data-testid="quick-year"
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Este Año
+                </Button>
               </div>
-              <div>
-                <Label>Departamento</Label>
-                <Select value={department} onValueChange={setDepartment}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los departamentos</SelectItem>
-                    {departments.map((dept: string) => (
-                      <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+
+              <div className="grid lg:grid-cols-3 gap-6">
+                <div>
+                  <Label htmlFor="start-date" className="text-sm font-medium text-gray-700 mb-2">
+                    Fecha de Inicio
+                  </Label>
+                  <Input
+                    id="start-date"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="tablet-input"
+                    data-testid="input-start-date"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="end-date" className="text-sm font-medium text-gray-700 mb-2">
+                    Fecha de Fin
+                  </Label>
+                  <Input
+                    id="end-date"
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="tablet-input"
+                    data-testid="input-end-date"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="department" className="text-sm font-medium text-gray-700 mb-2">
+                    Departamento
+                  </Label>
+                  <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                    <SelectTrigger className="tablet-input" data-testid="select-department">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los departamentos</SelectItem>
+                      {departments.map((dept) => (
+                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div>
-                <Label>Formato</Label>
-                <Select value={format} onValueChange={setFormat}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
-                    <SelectItem value="csv">CSV (.csv)</SelectItem>
-                    <SelectItem value="pdf">PDF (.pdf)</SelectItem>
-                  </SelectContent>
-                </Select>
+
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                <Button
+                  onClick={generateReport}
+                  disabled={isGenerating || isLoading}
+                  className="tablet-button"
+                  data-testid="generate-report"
+                >
+                  <Search className="h-4 w-4 mr-2" />
+                  {isGenerating || isLoading ? "Generando..." : "Generar Reporte"}
+                </Button>
+                <Button
+                  onClick={exportToExcel}
+                  disabled={!reportData || reportData.length === 0}
+                  variant="outline"
+                  className="tablet-button bg-accent text-white hover:bg-accent/90"
+                  data-testid="export-excel"
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Exportar a Excel
+                </Button>
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-6">
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="overtime"
-                    checked={includeOvertime}
-                    onCheckedChange={setIncludeOvertime}
-                  />
-                  <Label htmlFor="overtime" className="text-sm text-slate-700">
-                    Incluir horas extra
-                  </Label>
+            {/* Report Preview */}
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              {isLoading ? (
+                <div className="flex justify-center items-center py-12">
+                  <div className="loading-spinner" />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="breaks"
-                    checked={includeBreaks}
-                    onCheckedChange={setIncludeBreaks}
-                  />
-                  <Label htmlFor="breaks" className="text-sm text-slate-700">
-                    Incluir descansos
-                  </Label>
+              ) : reportData && reportData.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                          ID Empleado
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                          Nombre
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                          Departamento
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                          Fecha
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                          Entradas
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                          Salidas
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                          Horas Trabajadas
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                          Horas Extra
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                          Firma
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {reportData.map((row: any, index: number) => (
+                        <tr key={`${row.employeeId}-${row.date}-${index}`} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            {row.employeeId}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            {row.fullName}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {row.department}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {new Date(row.date).toLocaleDateString('es-ES')}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            {row.checkIns.join(", ") || "--"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            {row.checkOuts.join(", ") || "--"}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                            {row.totalHours.toFixed(1)}h
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            {row.overtimeHours.toFixed(1)}h
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-400">
+                            _________________
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="signature"
-                    checked={includeSignature}
-                    onCheckedChange={setIncludeSignature}
-                  />
-                  <Label htmlFor="signature" className="text-sm text-slate-700">
-                    Espacio para firma
-                  </Label>
+              ) : reportData ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500">
+                    No se encontraron datos para el período seleccionado
+                  </p>
                 </div>
-              </div>
-              <Button 
-                onClick={() => generateReportMutation.mutate()}
-                disabled={generateReportMutation.isPending}
-                className="bg-secondary hover:bg-emerald-700"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                {generateReportMutation.isPending ? "Generando..." : "Generar Reporte"}
-              </Button>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-gray-500">
+                    Selecciona las fechas y haz clic en "Generar Reporte" para ver los datos
+                  </p>
+                </div>
+              )}
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Recent Reports */}
-        <Card>
-          <CardContent className="p-0">
-            <div className="p-6 border-b border-slate-200">
-              <h3 className="text-xl font-semibold text-slate-900">Reportes Recientes</h3>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Nombre del Reporte</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Período</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Departamento</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Fecha de Generación</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {recentReports.map((report, index) => (
-                    <tr key={index} className="hover:bg-slate-50 transition-colors duration-200">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center space-x-2">
-                          <FileSpreadsheet className="w-5 h-5 text-secondary" />
-                          <span className="font-medium text-slate-900">{report.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-slate-600">{report.period}</td>
-                      <td className="px-6 py-4 text-slate-600">{report.department}</td>
-                      <td className="px-6 py-4 text-slate-600">{report.date}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex space-x-2">
-                          <Button size="sm">
-                            <Download className="w-4 h-4 mr-1" />
-                            Descargar
-                          </Button>
-                          <Button size="sm" variant="outline">
-                            <Eye className="w-4 h-4 mr-1" />
-                            Ver
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {/* Report Summary */}
+            {reportData && reportData.length > 0 && (
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card className="bg-primary/5 border-primary/20">
+                  <CardContent className="p-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-primary">
+                        {reportData.length}
+                      </p>
+                      <p className="text-sm text-gray-600">Total Registros</p>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-green-50 border-green-200">
+                  <CardContent className="p-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-green-600">
+                        {reportData.reduce((sum: number, row: any) => sum + row.totalHours, 0).toFixed(1)}h
+                      </p>
+                      <p className="text-sm text-gray-600">Total Horas</p>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-blue-50 border-blue-200">
+                  <CardContent className="p-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-blue-600">
+                        {reportData.reduce((sum: number, row: any) => sum + row.overtimeHours, 0).toFixed(1)}h
+                      </p>
+                      <p className="text-sm text-gray-600">Horas Extra</p>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-yellow-50 border-yellow-200">
+                  <CardContent className="p-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-yellow-600">
+                        {(reportData.reduce((sum: number, row: any) => sum + row.totalHours, 0) / reportData.length).toFixed(1)}h
+                      </p>
+                      <p className="text-sm text-gray-600">Promedio/Día</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -1,86 +1,66 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, json } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer, real, blob } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const workSchedules = pgTable("work_schedules", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const companies = sqliteTable("companies", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().default("JASANA"),
+  logo: blob("logo"),
+  primaryColor: text("primary_color").notNull().default("#0D9488"),
+  createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`),
+});
+
+export const schedules = sqliteTable("schedules", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   entryTime: text("entry_time").notNull(),
-  breakfastOutTime: text("breakfast_out_time"),
-  breakfastInTime: text("breakfast_in_time"),
-  lunchOutTime: text("lunch_out_time"),
-  lunchInTime: text("lunch_in_time"),
+  breakfastStart: text("breakfast_start"),
+  breakfastEnd: text("breakfast_end"),
+  lunchStart: text("lunch_start"),
+  lunchEnd: text("lunch_end"),
   exitTime: text("exit_time").notNull(),
-  overtimeEnabled: boolean("overtime_enabled").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
+  overtimeAllowed: integer("overtime_allowed", { mode: "boolean" }).default(false),
+  createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`),
 });
 
-export const employees = pgTable("employees", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const employees = sqliteTable("employees", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   employeeId: text("employee_id").notNull().unique(),
   fullName: text("full_name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
   department: text("department").notNull(),
-  workScheduleId: varchar("work_schedule_id").references(() => workSchedules.id),
-  photoUrl: text("photo_url"),
-  barcodeData: text("barcode_data").notNull(),
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
+  scheduleId: integer("schedule_id").references(() => schedules.id),
+  photo: blob("photo"),
+  barcode: text("barcode").notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).default(true),
+  createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`),
 });
 
-export const attendanceRecords = pgTable("attendance_records", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  employeeId: varchar("employee_id").references(() => employees.id).notNull(),
-  checkInTime: timestamp("check_in_time"),
-  checkOutTime: timestamp("check_out_time"),
-  breakfastOutTime: timestamp("breakfast_out_time"),
-  breakfastInTime: timestamp("breakfast_in_time"),
-  lunchOutTime: timestamp("lunch_out_time"),
-  lunchInTime: timestamp("lunch_in_time"),
-  totalHours: integer("total_hours"), // in minutes
-  overtimeHours: integer("overtime_hours"), // in minutes
+export const attendances = sqliteTable("attendances", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  employeeId: integer("employee_id").notNull().references(() => employees.id),
+  checkIn: integer("check_in", { mode: "timestamp" }),
+  checkOut: integer("check_out", { mode: "timestamp" }),
+  breakStart: integer("break_start", { mode: "timestamp" }),
+  breakEnd: integer("break_end", { mode: "timestamp" }),
+  lunchStart: integer("lunch_start", { mode: "timestamp" }),
+  lunchEnd: integer("lunch_end", { mode: "timestamp" }),
+  totalHours: real("total_hours").default(0),
+  overtimeHours: real("overtime_hours").default(0),
   date: text("date").notNull(), // YYYY-MM-DD format
-  createdAt: timestamp("created_at").defaultNow(),
+  status: text("status").notNull().default("pending"), // pending, complete, incomplete
+  createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`),
 });
 
-export const credentialSettings = pgTable("credential_settings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  companyName: text("company_name").notNull(),
-  logoUrl: text("logo_url"),
-  primaryColor: text("primary_color").default("#2563EB"),
-  fontFamily: text("font_family").default("Inter"),
-  template: json("template").$type<{
-    width: number;
-    height: number;
-    elements: Array<{
-      type: string;
-      position: { x: number; y: number };
-      size: { width: number; height: number };
-      style: Record<string, any>;
-    }>;
-  }>(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+// Zod schemas
+export const insertCompanySchema = createInsertSchema(companies).omit({
+  id: true,
+  createdAt: true,
 });
 
-export const departments = pgTable("departments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull().unique(),
-  description: text("description"),
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const systemSettings = pgTable("system_settings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  companyName: text("company_name").default("TimeCheck Pro"),
-  timezone: text("timezone").default("America/Mexico_City"),
-  emailNotifications: boolean("email_notifications").default(true),
-  darkMode: boolean("dark_mode").default(false),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-// Insert schemas
-export const insertWorkScheduleSchema = createInsertSchema(workSchedules).omit({
+export const insertScheduleSchema = createInsertSchema(schedules).omit({
   id: true,
   createdAt: true,
 });
@@ -88,37 +68,46 @@ export const insertWorkScheduleSchema = createInsertSchema(workSchedules).omit({
 export const insertEmployeeSchema = createInsertSchema(employees).omit({
   id: true,
   createdAt: true,
+}).extend({
+  email: z.string().email().optional().or(z.literal("")),
+  phone: z.string().optional().or(z.literal("")),
+  scheduleId: z.number().optional().or(z.string().transform(val => val === "" ? undefined : parseInt(val)).optional()),
 });
 
-export const insertAttendanceRecordSchema = createInsertSchema(attendanceRecords).omit({
+export const insertAttendanceSchema = createInsertSchema(attendances).omit({
   id: true,
   createdAt: true,
-});
-
-export const insertCredentialSettingsSchema = createInsertSchema(credentialSettings).omit({
-  id: true,
-});
-
-export const insertDepartmentSchema = createInsertSchema(departments).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertSystemSettingsSchema = createInsertSchema(systemSettings).omit({
-  id: true,
 });
 
 // Types
-export type WorkSchedule = typeof workSchedules.$inferSelect;
-export type Employee = typeof employees.$inferSelect;
-export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
-export type CredentialSettings = typeof credentialSettings.$inferSelect;
-export type SystemSettings = typeof systemSettings.$inferSelect;
-export type Department = typeof departments.$inferSelect;
+export type Company = typeof companies.$inferSelect;
+export type InsertCompany = z.infer<typeof insertCompanySchema>;
 
-export type InsertWorkSchedule = z.infer<typeof insertWorkScheduleSchema>;
+export type Schedule = typeof schedules.$inferSelect;
+export type InsertSchedule = z.infer<typeof insertScheduleSchema>;
+
+export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
-export type InsertAttendanceRecord = z.infer<typeof insertAttendanceRecordSchema>;
-export type InsertCredentialSettings = z.infer<typeof insertCredentialSettingsSchema>;
-export type InsertSystemSettings = z.infer<typeof insertSystemSettingsSchema>;
-export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
+
+export type Attendance = typeof attendances.$inferSelect;
+export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
+
+// Extended types for API responses
+export type EmployeeWithSchedule = Employee & {
+  schedule?: Schedule;
+};
+
+export type AttendanceWithEmployee = Attendance & {
+  employee: Employee;
+};
+
+export type AttendanceReport = {
+  employeeId: string;
+  fullName: string;
+  department: string;
+  checkIns: string[];
+  checkOuts: string[];
+  totalHours: number;
+  overtimeHours: number;
+  date: string;
+};

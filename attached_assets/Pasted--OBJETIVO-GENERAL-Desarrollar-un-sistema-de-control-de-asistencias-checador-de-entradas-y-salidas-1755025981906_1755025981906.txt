@@ -1,0 +1,76 @@
+✅ OBJETIVO GENERAL
+Desarrollar un sistema de control de asistencias (checador de entradas y salidas) con una interfaz adaptada a tablet, permitiendo el escaneo de códigos de barras desde cámara o escáner físico. El sistema debe incluir gestión de empleados, generación de credenciales, reportes en Excel y configuración de horarios.
+________________________________________
+🖥️ MÓDULOS DEL SISTEMA
+1. Check In / Check Out
+•	Funcionalidad principal: Registro de entradas y salidas de empleados.
+•	Interfaz adaptable a tablet.
+•	Métodos de escaneo:
+o	Cámara (integrada)
+o	Escáner físico conectado de manera automática al leer el código de barras
+o	Mostrar SwetAlert indicando check existoso al centro de la pantalla y grande con la foto y nombre de empleado, área y hrs trabajadas hasta ese momento, añade un bloque de 1 min si ya realizo un check.
+•	Escanea código de barras del ID del empleado.
+________________________________________
+2. Gestión de Empleados
+•	Vista general de todos los empleados.
+•	Filtros disponibles para historial de asistencias:
+o	Última semana (de viernes a jueves, excluye sábado y domingo)
+o	Por mes
+o	Por año
+•	Botón de “Ver detalles”:
+o	Historial de asistencias por empleado.
+o	Resumen de horas trabajadas y horas extras.
+________________________________________
+3. Configuraciones
+•	Gestión de horarios laborales predefinidos:
+o	Horario Administrativo
+o	Horario 1
+o	Horario 2
+o	Personalizar horario
+o	Poder editar horarios existentes
+•	Estructura del horario a registrar:
+o	Hora de entrada general
+o	Salida a desayuno
+o	Regreso de desayuno
+o	Salida a comida
+o	Regreso de comida
+o	Hora de salida general
+o	Registro de horas extra (si aplica)
+•	Configuración del formato de credencial:
+o	Colores
+o	Elementos gráficos
+o	Fuente de letra, tamaños, etc.
+o	Logo de la empresa
+________________________________________
+4. Añadir Empleados
+Formulario para agregar nuevos empleados con los siguientes campos:
+•	Área o Departamento
+•	ID del empleado (único)
+•	Horario laboral asignado (seleccionable)
+•	Nombre completo
+•	Codigo de Barras
+•	Subida de fotografía
+________________________________________
+5. Generador de Credenciales
+•	Dimensiones: 85 mm de ancho x 54 mm de alto (5.4 cm)
+•	Elementos en la credencial:
+o	Logo de la empresa (esquina superior derecha)
+o	ID del empleado (esquina superior izquierda)
+o	Nombre (debajo del ID)
+o	Area del empleado (Bajo el nombre y con lentra mas pequeña)
+o	Fotografía del empleado (al lado del nombre)
+o	Código de barras del ID (parte inferior)
+________________________________________
+6. Reportes en Excel (.xlsx)
+•	Columnas del archivo generado:
+o	ID del empleado
+o	Nombre completo
+o	Departamento
+o	Registro de entradas
+o	Registro de salidas
+o	Total de horas trabajadas
+o	Total de horas extra
+•	Formato:
+o	Estilo de tabla
+o	Espacio para firma del empleado (para hojas de asistencia físicas)
+
