@@ -125,73 +125,88 @@ export default function Credentials() {
       }
     }
 
-    // Generate barcode using Code128
+    // Generate barcode using Code-128
     const barcodeY = height - 80;
     const barcodeText = selectedEmployee.barcode || selectedEmployee.employeeId;
 
     try {
       const { default: JsBarcode } = await import('jsbarcode');
       const barcodeCanvas = document.createElement('canvas');
+      const barcodeCtx = barcodeCanvas.getContext('2d');
+      
+      if (!barcodeCtx) {
+        throw new Error('Could not get barcode canvas context');
+      }
 
-      // Configuración mejorada para el código de barras
+      // Configuración optimizada para Code-128
       JsBarcode(barcodeCanvas, barcodeText, {
         format: "CODE128",
-        width: 3,
-        height: 50,
+        width: 2.5, // Ancho óptimo para Code-128
+        height: 45,
         displayValue: true,
-        fontSize: 14,
+        fontSize: 12,
+        fontOptions: "bold",
+        font: "Arial",
         textAlign: "center",
         textPosition: "bottom",
-        marginTop: 5,
+        textMargin: 2,
+        marginTop: 0,
         marginBottom: 5,
-        marginLeft: 10,
-        marginRight: 10,
+        marginLeft: 5,
+        marginRight: 5,
         background: "#FFFFFF",
-        lineColor: "#000000"
+        lineColor: "#000000",
+        valid: function(valid) {
+          if (!valid) {
+            console.error('Invalid barcode data for Code-128:', barcodeText);
+          }
+        }
       });
 
-      // Asegurar que el canvas del código de barras se haya generado correctamente
+      // Verificar que el código de barras se generó correctamente
       if (barcodeCanvas.width > 0 && barcodeCanvas.height > 0) {
-        const barcodeWidth = Math.min(barcodeCanvas.width, width - 80);
+        const maxBarcodeWidth = width - 80;
+        const barcodeWidth = Math.min(barcodeCanvas.width, maxBarcodeWidth);
         const barcodeX = (width - barcodeWidth) / 2;
+        const scale = barcodeWidth / barcodeCanvas.width;
 
-        ctx.drawImage(barcodeCanvas, barcodeX, barcodeY - 25, barcodeWidth, barcodeCanvas.height);
+        // Dibujar el código de barras escalado si es necesario
+        ctx.drawImage(
+          barcodeCanvas, 
+          barcodeX, 
+          barcodeY - 30, 
+          barcodeWidth, 
+          barcodeCanvas.height * scale
+        );
+        
+        console.log('Code-128 barcode generated successfully for:', barcodeText);
       } else {
-        throw new Error('Barcode canvas generation failed');
+        throw new Error('Code-128 barcode canvas generation failed - invalid dimensions');
       }
     } catch (error) {
-      // Fallback mejorado para representación simple del código de barras
-      console.error('Error generating barcode, using fallback:', error);
-
-      // Dibuja barras del código de barras más realistas
-      ctx.fillStyle = '#000000';
-      const barWidth = 3;
-      const barSpacing = 2;
-      const totalBars = Math.min(barcodeText.length * 8, 50);
-      const totalWidth = totalBars * (barWidth + barSpacing);
-      const startX = (width - totalWidth) / 2;
-
-      for (let i = 0; i < totalBars; i++) {
-        const x = startX + (i * (barWidth + barSpacing));
-        const charIndex = Math.floor(i / 8);
-        const barIndex = i % 8;
-        const charCode = barcodeText.charCodeAt(charIndex) || 65; // Default to 'A'
-
-        // Varía la altura de las barras basándose en el código del carácter
-        const heightVariation = ((charCode + barIndex) % 3) * 5;
-        const barHeight = 35 + heightVariation;
-
-        // Alterna entre barras gruesas y delgadas
-        const currentBarWidth = ((charCode + barIndex) % 2 === 0) ? barWidth : barWidth + 1;
-
-        ctx.fillRect(x, barcodeY - 10, currentBarWidth, barHeight);
-      }
-
-      // Texto del código de barras
-      ctx.fillStyle = '#000000';
-      ctx.font = '14px Arial';
+      console.error('Error generating Code-128 barcode:', error);
+      
+      // Fallback con simulación de Code-128
+      ctx.fillStyle = '#FF0000';
+      ctx.font = 'bold 12px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText(barcodeText, width / 2, barcodeY + 40);
+      ctx.fillText('ERROR: No se pudo generar código Code-128', width / 2, barcodeY - 15);
+      
+      // Mostrar el texto del código como fallback
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 14px Arial';
+      ctx.fillText(`Código: ${barcodeText}`, width / 2, barcodeY + 10);
+      
+      // Dibujar barras simples como indicador visual
+      const fallbackBarWidth = 2;
+      const fallbackBars = 20;
+      const fallbackTotalWidth = fallbackBars * fallbackBarWidth * 2;
+      const fallbackStartX = (width - fallbackTotalWidth) / 2;
+      
+      for (let i = 0; i < fallbackBars; i++) {
+        const x = fallbackStartX + (i * fallbackBarWidth * 2);
+        ctx.fillRect(x, barcodeY - 5, fallbackBarWidth, 25);
+      }
     }
 
     // Bottom accent bar
@@ -356,24 +371,34 @@ export default function Credentials() {
                           )}
                         </div>
 
-                        {/* Barcode at bottom */}
+                        {/* Code-128 Barcode at bottom */}
                         <div className="mt-3 pt-2 border-t border-gray-200">
                           <div className="text-center">
                             <div className="flex justify-center items-center mb-1">
-                              {Array.from({ length: 30 }, (_, i) => (
-                                <div
-                                  key={i}
-                                  className="bg-black"
-                                  style={{
-                                    width: `${(selectedEmployee.employeeId.charCodeAt(i % selectedEmployee.employeeId.length) % 3) + 1}px`,
-                                    height: `${12 + ((selectedEmployee.employeeId.charCodeAt(i % selectedEmployee.employeeId.length) % 2) * 3)}px`,
-                                    marginRight: '1px'
-                                  }}
-                                />
-                              ))}
+                              {/* Code-128 pattern simulation */}
+                              {Array.from({ length: 35 }, (_, i) => {
+                                const barcodeData = selectedEmployee.barcode || selectedEmployee.employeeId;
+                                const charCode = barcodeData.charCodeAt(i % barcodeData.length);
+                                const pattern = (charCode * (i + 1)) % 4;
+                                
+                                return (
+                                  <div
+                                    key={i}
+                                    className="bg-black"
+                                    style={{
+                                      width: pattern === 0 ? '1px' : pattern === 1 ? '2px' : pattern === 2 ? '3px' : '1px',
+                                      height: '16px',
+                                      marginRight: i % 2 === 0 ? '1px' : '2px'
+                                    }}
+                                  />
+                                );
+                              })}
                             </div>
                             <p className="text-xs text-gray-600 font-mono">
-                              {selectedEmployee.employeeId}
+                              {selectedEmployee.barcode || selectedEmployee.employeeId}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Code-128
                             </p>
                           </div>
                         </div>

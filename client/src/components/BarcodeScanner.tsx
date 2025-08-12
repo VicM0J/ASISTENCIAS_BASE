@@ -23,38 +23,131 @@ export default function BarcodeScanner({ onScan, disabled, className }: BarcodeS
   const startCamera = async () => {
     try {
       setError(null);
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: "environment",
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+      setIsScanning(false);
+      
+      // Verificar si getUserMedia está disponible
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("getUserMedia no está soportado en este navegador");
+      }
+
+      // Intentar primero con configuraciones específicas
+      let mediaStream;
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            facingMode: "environment",
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 }
+          },
+          audio: false
+        });
+      } catch (specificError) {
+        console.log("Configuración específica falló, intentando configuración básica:", specificError);
+        
+        // Si falla, intentar con configuración más básica
+        try {
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" },
+            audio: false
+          });
+        } catch (environmentError) {
+          console.log("Cámara trasera no disponible, usando cualquier cámara:", environmentError);
+          
+          // Si tampoco funciona, usar cualquier cámara disponible
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
         }
-      });
+      }
       
       setStream(mediaStream);
+      
       if (videoRef.current) {
+        // Limpiar cualquier stream anterior
+        videoRef.current.srcObject = null;
+        
+        // Configurar el video antes de asignar el stream
+        videoRef.current.setAttribute('playsinline', 'true');
+        videoRef.current.setAttribute('webkit-playsinline', 'true');
+        videoRef.current.muted = true;
+        videoRef.current.controls = false;
+        videoRef.current.autoplay = true;
+        
+        // Asignar el stream al video
         videoRef.current.srcObject = mediaStream;
-        await videoRef.current.play();
-        startBarcodeDetection();
+        
+        console.log("Stream assigned to video element", mediaStream);
+        
+        // Actualizar estado inmediatamente para mostrar la UI
+        setIsScanning(true);
+        
+        // Configurar eventos del video
+        videoRef.current.onloadedmetadata = () => {
+          console.log("Video metadata cargada");
+          if (videoRef.current) {
+            console.log("Dimensiones del video:", videoRef.current.videoWidth, "x", videoRef.current.videoHeight);
+            startBarcodeDetection();
+          }
+        };
+        
+        videoRef.current.oncanplay = () => {
+          console.log("Video puede reproducirse");
+        };
+        
+        videoRef.current.onplay = () => {
+          console.log("Video comenzó a reproducirse");
+        };
+
+        // Agregar evento de error para el video
+        videoRef.current.onerror = (error) => {
+          console.error("Error en el elemento video:", error);
+          setError("Error al cargar el video de la cámara.");
+        };
       }
-      setIsScanning(true);
-    } catch (err) {
-      setError("No se pudo acceder a la cámara. Verifica los permisos.");
+      
+    } catch (err: any) {
+      let errorMessage = "No se pudo acceder a la cámara.";
+      
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        errorMessage = "Permisos de cámara denegados. Por favor permite el acceso a la cámara.";
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        errorMessage = "No se encontró ninguna cámara en el dispositivo.";
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        errorMessage = "La cámara está siendo usada por otra aplicación.";
+      } else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
+        errorMessage = "La cámara no cumple con los requisitos necesarios.";
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
       console.error("Camera access error:", err);
     }
   };
 
   const stopCamera = useCallback(() => {
     if (stream) {
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach(track => {
+        track.stop();
+        console.log("Track stopped:", track.kind);
+      });
       setStream(null);
     }
+    
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+      videoRef.current.pause();
+    }
+    
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
       detectionIntervalRef.current = null;
     }
+    
     setIsScanning(false);
     setIsDetecting(false);
+    setError(null);
   }, [stream]);
 
   const startBarcodeDetection = () => {
@@ -143,6 +236,38 @@ export default function BarcodeScanner({ onScan, disabled, className }: BarcodeS
     return prefixes[Math.floor(Math.random() * prefixes.length)] + numbers;
   };
 
+  const checkCameraPermissions = async () => {
+    try {
+      if (navigator.permissions) {
+        const permission = await navigator.permissions.query({ name: 'camera' as PermissionName });
+        console.log("Camera permission status:", permission.state);
+        
+        if (permission.state === 'denied') {
+          setError("Permisos de cámara denegados. Por favor permite el acceso en la configuración del navegador.");
+          return false;
+        }
+      }
+      
+      // Verificar si hay cámaras disponibles
+      if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cameras = devices.filter(device => device.kind === 'videoinput');
+        
+        if (cameras.length === 0) {
+          setError("No se encontraron cámaras en el dispositivo.");
+          return false;
+        }
+        
+        console.log(`Encontradas ${cameras.length} cámaras:`, cameras);
+      }
+      
+      return true;
+    } catch (err) {
+      console.log("No se pudieron verificar los permisos:", err);
+      return true; // Continuar de todas formas
+    }
+  };
+
   const manualCapture = () => {
     if (!videoRef.current || !canvasRef.current) return;
 
@@ -165,51 +290,115 @@ export default function BarcodeScanner({ onScan, disabled, className }: BarcodeS
     let buffer = "";
     let timeout: NodeJS.Timeout;
     let lastInputTime = 0;
+    let scanStartTime = 0;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (disabled || !event.key) return;
+      if (disabled) return;
 
       const currentTime = Date.now();
       
-      // Si pasó mucho tiempo entre inputs, reinicia el buffer
-      if (currentTime - lastInputTime > 100 && buffer.length > 0) {
-        buffer = "";
+      // Si es el primer carácter, marca el inicio del escaneo
+      if (buffer.length === 0) {
+        scanStartTime = currentTime;
+        lastInputTime = currentTime;
       }
       
-      lastInputTime = currentTime;
-
+      // Si pasó mucho tiempo entre inputs (más de 200ms), reinicia el buffer
+      if (currentTime - lastInputTime > 200 && buffer.length > 0) {
+        console.log("Scanner timeout, reiniciando buffer");
+        buffer = "";
+        scanStartTime = currentTime;
+      }
+      
       // Los escáneres físicos normalmente envían Enter después del código
-      if (event.key === "Enter" && buffer.length >= 6) {
+      if (event.key === "Enter" && buffer.length >= 4) {
         event.preventDefault();
         event.stopPropagation();
+        
+        const scanDuration = currentTime - scanStartTime;
+        console.log(`🔍 Scanner detectado con ENTER: "${buffer}" (${scanDuration}ms)`);
+        
         onScan(buffer.trim().toUpperCase());
         buffer = "";
         return;
       }
 
-      // Acumula caracteres (excluye teclas especiales)
-      if (event.key && event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        // Solo previene la escritura si el campo activo no es un input
+      // Acumula caracteres alfanuméricos válidos para códigos de barras
+      if (event.key && event.key.length === 1 && /[A-Za-z0-9]/.test(event.key) && 
+          !event.ctrlKey && !event.altKey && !event.metaKey) {
+        
+        const timeBetweenChars = currentTime - lastInputTime;
+        lastInputTime = currentTime;
+        
+        // Para escáneres físicos, la velocidad es muy alta (menos de 100ms entre caracteres)
+        const isFromScanner = timeBetweenChars < 100 || buffer.length === 0;
+        
+        // Verificar si hay un campo de entrada activo
         const activeElement = document.activeElement;
-        if (activeElement?.tagName !== 'INPUT' && activeElement?.tagName !== 'TEXTAREA') {
+        const isInputField = activeElement?.tagName === 'INPUT' || 
+                           activeElement?.tagName === 'TEXTAREA' ||
+                           activeElement?.getAttribute('contenteditable') === 'true';
+        
+        // Solo procesar si parece venir de un escáner Y no hay campo de entrada activo
+        if (isFromScanner && !isInputField) {
           event.preventDefault();
+          event.stopPropagation();
+          
+          buffer += event.key.toUpperCase();
+          console.log(`📊 Scanner char: "${event.key}" -> buffer: "${buffer}" (${timeBetweenChars}ms)`);
+          
+          // Auto-procesar después de cierta longitud si no viene Enter
+          if (buffer.length >= 6 && buffer.length <= 20) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+              if (buffer.length >= 4) {
+                console.log(`⚡ Auto-procesando scanner: "${buffer}"`);
+                onScan(buffer.trim().toUpperCase());
+                buffer = "";
+              }
+            }, 300); // Esperar 300ms para más caracteres
+          }
+        } else if (!isFromScanner && buffer.length > 0) {
+          // Si la velocidad no es de escáner pero hay buffer, limpiar
+          console.log("❌ Velocidad no es de escáner, limpiando buffer");
+          buffer = "";
         }
         
-        buffer += event.key.toUpperCase();
-        
-        // Limpia el buffer después de 300ms de inactividad
+        // Limpia el buffer después de inactividad
         clearTimeout(timeout);
         timeout = setTimeout(() => {
-          buffer = "";
-        }, 300);
+          if (buffer.length > 0) {
+            console.log("🧹 Limpiando buffer por inactividad:", buffer);
+            buffer = "";
+          }
+        }, 1000);
       }
     };
 
+    // Escuchar eventos de pegado (algunos escáneres actúan como clipboard)
+    const handlePaste = (event: ClipboardEvent) => {
+      if (disabled) return;
+      
+      const pastedText = event.clipboardData?.getData('text/plain');
+      if (pastedText && pastedText.length >= 4 && pastedText.length <= 20) {
+        const barcodePattern = /^[A-Z0-9]+$/i;
+        if (barcodePattern.test(pastedText)) {
+          console.log(`📋 Scanner via paste detectado: "${pastedText}"`);
+          event.preventDefault();
+          onScan(pastedText.toUpperCase());
+        }
+      }
+    };
+
+    console.log("🔧 Iniciando escucha de escáner físico");
     document.addEventListener("keydown", handleKeyDown, true);
+    document.addEventListener("paste", handlePaste, true);
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown, true);
+      document.removeEventListener("paste", handlePaste, true);
       clearTimeout(timeout);
+      console.log("🛑 Deteniendo escucha de escáner físico");
     };
   }, [onScan, disabled]);
 
@@ -241,7 +430,12 @@ export default function BarcodeScanner({ onScan, disabled, className }: BarcodeS
                     Apunta la cámara hacia el código de barras
                   </p>
                   <Button
-                    onClick={startCamera}
+                    onClick={async () => {
+                      const hasPermission = await checkCameraPermissions();
+                      if (hasPermission) {
+                        startCamera();
+                      }
+                    }}
                     disabled={disabled}
                     className="tablet-button"
                     data-testid="start-camera"
@@ -258,22 +452,34 @@ export default function BarcodeScanner({ onScan, disabled, className }: BarcodeS
                 </>
               ) : (
                 <div className="space-y-4">
-                  <div className="relative">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      Vista de la Cámara
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Apunta la cámara hacia el código de barras
+                    </p>
+                  </div>
+                  
+                  <div className="relative mx-auto" style={{ width: '100%', maxWidth: '400px' }}>
                     <video
                       ref={videoRef}
-                      className="w-full max-w-sm mx-auto rounded-lg"
                       autoPlay
                       playsInline
                       muted
+                      style={{ 
+                        width: '100%',
+                        height: '300px',
+                        backgroundColor: '#000',
+                        border: '3px solid #ef4444',
+                        borderRadius: '8px',
+                        objectFit: 'cover'
+                      }}
                     />
-                    <div className="absolute inset-0 border-2 border-primary rounded-lg pointer-events-none">
-                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                        <Square className="h-20 w-20 text-primary opacity-50" />
-                      </div>
-                      {/* Scanning indicator */}
-                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                        <div className="w-32 h-1 bg-red-500 opacity-75 animate-pulse"></div>
-                      </div>
+                    {/* Overlay con guía de escaneo */}
+                    <div className="absolute inset-0 pointer-events-none">
+                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 border-2 border-white border-dashed w-48 h-16 rounded opacity-75"></div>
+                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-0.5 bg-red-500 animate-pulse"></div>
                     </div>
                   </div>
                   

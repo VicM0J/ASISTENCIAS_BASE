@@ -9,7 +9,8 @@ import {
   BarChart3, 
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  CheckSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -23,6 +24,7 @@ const navigation = [
   { href: "/employees", label: "Empleados", icon: Users },
   { href: "/add-employee", label: "Añadir Empleado", icon: UserPlus },
   { href: "/schedules", label: "Horarios", icon: Calendar },
+  { href: "/attendances", label: "Asistencias", icon: CheckSquare },
   { href: "/credentials", label: "Credenciales", icon: IdCard },
   { href: "/reports", label: "Reportes", icon: BarChart3 },
   { href: "/settings", label: "Configuración", icon: Settings },
@@ -62,7 +64,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {navigation.map((item) => {
           const isActive = location === item.href || (item.href === "/checkin" && location === "/");
           const Icon = item.icon;
-          
+
           return (
             <button
               key={item.href}

@@ -111,6 +111,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/employees/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const employee = await storage.getEmployee(id);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+      res.json(employee);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get employee" });
+    }
+  });
+
   app.get("/api/employees/by-barcode/:barcode", async (req, res) => {
     try {
       const barcode = req.params.barcode;
@@ -278,6 +291,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to check out" });
+    }
+  });
+
+  app.post("/api/attendance-toggle", async (req, res) => {
+    try {
+      const { barcode, employeeId } = req.body;
+
+      let employee;
+      if (barcode) {
+        employee = await storage.getEmployeeByBarcode(barcode);
+      } else if (employeeId) {
+        employee = await storage.getEmployeeByEmployeeId(employeeId);
+      }
+
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      // Get today's attendances to count records
+      const today = new Date().toISOString().split('T')[0];
+      const todayAttendances = await storage.getEmployeeAttendances(
+        employee.id, 
+        today, 
+        today
+      );
+
+      // Check for recent activity (within 1 minute)
+      if (todayAttendances.length > 0) {
+        const lastAttendance = todayAttendances[todayAttendances.length - 1];
+        const lastActivity = lastAttendance.checkOut || lastAttendance.checkIn;
+        
+        if (lastActivity) {
+          const lastTime = new Date(lastActivity);
+          const now = new Date();
+          const diffMinutes = (now.getTime() - lastTime.getTime()) / (1000 * 60);
+
+          if (diffMinutes < 1) {
+            return res.status(400).json({
+              message: "Registro bloqueado. Espera 1 minuto antes de volver a registrar.",
+              cooldown: true
+            });
+          }
+        }
+      }
+
+      // Count total check-ins and check-outs today
+      let totalRecords = 0;
+      todayAttendances.forEach(att => {
+        if (att.checkIn) totalRecords++;
+        if (att.checkOut) totalRecords++;
+      });
+
+      // Determine if this should be check-in or check-out
+      // Odd numbers (1,3,5) = check-in, Even numbers (2,4,6) = check-out
+      const isCheckIn = (totalRecords % 2) === 0;
+
+      let attendance;
+      let hoursWorked = 0;
+
+      if (isCheckIn) {
+        attendance = await storage.checkIn(employee.id);
+        
+        // Calculate hours worked today if there are previous records
+        if (attendance.checkIn && attendance.checkOut) {
+          hoursWorked = attendance.totalHours || 0;
+        } else if (attendance.checkIn) {
+          const checkInTime = new Date(attendance.checkIn);
+          const now = new Date();
+          hoursWorked = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+        }
+      } else {
+        attendance = await storage.checkOut(employee.id);
+        hoursWorked = attendance.totalHours || 0;
+      }
+
+      res.json({
+        success: true,
+        employee,
+        attendance,
+        hoursWorked: Math.round(hoursWorked * 100) / 100,
+        isCheckIn,
+        recordNumber: totalRecords + 1
+      });
+    } catch (error) {
+      console.error("Attendance toggle error:", error);
+      res.status(500).json({ message: "Failed to process attendance" });
     }
   });
 

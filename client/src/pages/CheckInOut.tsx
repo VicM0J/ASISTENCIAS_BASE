@@ -21,53 +21,33 @@ export default function CheckInOut() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  const checkInMutation = useMutation({
+  const attendanceMutation = useMutation({
     mutationFn: async (data: { barcode?: string; employeeId?: string }) => {
-      const response = await apiRequest("POST", "/api/checkin", data);
+      const response = await apiRequest("POST", "/api/attendance-toggle", data);
       return response.json();
     },
     onSuccess: (data) => {
       if (data.success) {
-        showSuccessAlert(data.employee, data.hoursWorked, "Entrada");
+        const actionType = data.isCheckIn ? "Entrada" : "Salida";
+        showSuccessAlert(data.employee, data.hoursWorked, actionType);
         queryClient.invalidateQueries({ queryKey: ["/api/attendances"] });
         setManualId("");
       }
     },
     onError: (error: any) => {
-      if (error.message.includes("Check-in bloqueado")) {
+      if (error.message.includes("bloqueado")) {
         toast({
-          title: "Check-in Bloqueado",
+          title: "Registro Bloqueado",
           description: "Debes esperar 1 minuto antes de volver a registrar.",
           variant: "destructive",
         });
       } else {
         toast({
           title: "Error",
-          description: "No se pudo registrar la entrada. Verifica el código.",
+          description: "No se pudo registrar la asistencia. Verifica el código.",
           variant: "destructive",
         });
       }
-    },
-  });
-
-  const checkOutMutation = useMutation({
-    mutationFn: async (data: { barcode?: string; employeeId?: string }) => {
-      const response = await apiRequest("POST", "/api/checkout", data);
-      return response.json();
-    },
-    onSuccess: (data) => {
-      if (data.success) {
-        showSuccessAlert(data.employee, data.hoursWorked, "Salida");
-        queryClient.invalidateQueries({ queryKey: ["/api/attendances"] });
-        setManualId("");
-      }
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "No se pudo registrar la salida. Verifica el código.",
-        variant: "destructive",
-      });
     },
   });
 
@@ -98,12 +78,34 @@ export default function CheckInOut() {
   };
 
   const handleBarcodeScan = (barcode: string) => {
-    if (barcode && barcode.length > 3) {
-      setScannerReady(false);
-      checkInMutation.mutate({ barcode });
-      // Reset scanner ready state after mutation completes
-      setTimeout(() => setScannerReady(true), 2000);
+    console.log(`Procesando código escaneado: "${barcode}"`);
+    
+    if (!barcode || barcode.length < 4) {
+      console.log("Código muy corto, ignorando");
+      return;
     }
+
+    if (!scannerReady) {
+      console.log("Scanner no está listo, ignorando");
+      return;
+    }
+
+    setScannerReady(false);
+    
+    toast({
+      title: "Código Detectado",
+      description: `Procesando código: ${barcode}`,
+      duration: 2000,
+    });
+
+    console.log("Enviando registro de asistencia para:", barcode);
+    attendanceMutation.mutate({ barcode });
+    
+    // Reset scanner ready state after mutation completes
+    setTimeout(() => {
+      setScannerReady(true);
+      console.log("Scanner listo nuevamente");
+    }, 3000);
   };
 
   const handleManualEntry = () => {
@@ -115,7 +117,7 @@ export default function CheckInOut() {
       });
       return;
     }
-    checkInMutation.mutate({ employeeId: manualId.trim() });
+    attendanceMutation.mutate({ employeeId: manualId.trim() });
   };
 
   return (
@@ -146,7 +148,7 @@ export default function CheckInOut() {
 
             <BarcodeScanner 
               onScan={handleBarcodeScan}
-              disabled={checkInMutation.isPending}
+              disabled={attendanceMutation.isPending}
             />
 
             {/* Manual Input */}
@@ -167,11 +169,11 @@ export default function CheckInOut() {
                   />
                   <Button
                     onClick={handleManualEntry}
-                    disabled={checkInMutation.isPending || !manualId.trim()}
+                    disabled={attendanceMutation.isPending || !manualId.trim()}
                     className="tablet-button bg-accent hover:bg-accent/90"
                     data-testid="manual-checkin"
                   >
-                    {checkInMutation.isPending ? "Registrando..." : "Registrar"}
+                    {attendanceMutation.isPending ? "Registrando..." : "Registrar"}
                   </Button>
                 </div>
               </div>
