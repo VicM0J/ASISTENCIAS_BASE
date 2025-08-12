@@ -4,10 +4,9 @@ import { storage } from "./storage";
 import { insertEmployeeSchema, insertScheduleSchema, insertCompanySchema } from "@shared/schema";
 import multer from "multer";
 import ExcelJS from "exceljs";
-import JsBarcode from "jsbarcode";
-import { Canvas } from "canvas";
 
-const upload = multer({ 
+
+const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
@@ -131,7 +130,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.file) {
         data.photo = req.file.buffer;
       }
-      
+
       // Generate barcode if not provided
       if (!data.barcode) {
         data.barcode = data.employeeId;
@@ -202,14 +201,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/checkin", async (req, res) => {
     try {
       const { barcode, employeeId } = req.body;
-      
+
       let employee;
       if (barcode) {
         employee = await storage.getEmployeeByBarcode(barcode);
       } else if (employeeId) {
         employee = await storage.getEmployeeByEmployeeId(employeeId);
       }
-      
+
       if (!employee) {
         return res.status(404).json({ message: "Employee not found" });
       }
@@ -217,22 +216,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check for recent check-in (within 1 minute)
       const today = new Date().toISOString().split('T')[0];
       const existingAttendance = await storage.getTodayAttendance(employee.id);
-      
+
       if (existingAttendance?.checkIn) {
         const lastCheckIn = new Date(existingAttendance.checkIn);
         const now = new Date();
         const diffMinutes = (now.getTime() - lastCheckIn.getTime()) / (1000 * 60);
-        
+
         if (diffMinutes < 1) {
-          return res.status(400).json({ 
+          return res.status(400).json({
             message: "Check-in bloqueado. Espera 1 minuto antes de volver a registrar.",
-            cooldown: true 
+            cooldown: true
           });
         }
       }
 
       const attendance = await storage.checkIn(employee.id);
-      
+
       // Calculate hours worked today
       let hoursWorked = 0;
       if (attendance.checkIn && attendance.checkOut) {
@@ -257,20 +256,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/checkout", async (req, res) => {
     try {
       const { barcode, employeeId } = req.body;
-      
+
       let employee;
       if (barcode) {
         employee = await storage.getEmployeeByBarcode(barcode);
       } else if (employeeId) {
         employee = await storage.getEmployeeByEmployeeId(employeeId);
       }
-      
+
       if (!employee) {
         return res.status(404).json({ message: "Employee not found" });
       }
 
       const attendance = await storage.checkOut(employee.id);
-      
+
       res.json({
         success: true,
         employee,
@@ -286,7 +285,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/reports/attendance", async (req, res) => {
     try {
       const { startDate, endDate, department } = req.query;
-      
+
       if (!startDate || !endDate) {
         return res.status(400).json({ message: "Start date and end date are required" });
       }
@@ -296,7 +295,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         endDate as string,
         department as string
       );
-      
+
       res.json(report);
     } catch (error) {
       res.status(500).json({ message: "Failed to generate attendance report" });
@@ -306,7 +305,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/reports/attendance/excel", async (req, res) => {
     try {
       const { startDate, endDate, department } = req.query;
-      
+
       if (!startDate || !endDate) {
         return res.status(400).json({ message: "Start date and end date are required" });
       }
@@ -372,27 +371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Barcode generation
-  app.get("/api/barcode/:text", async (req, res) => {
-    try {
-      const text = req.params.text;
-      const canvas = new Canvas(200, 50, "svg");
-      
-      JsBarcode(canvas, text, {
-        format: "CODE128",
-        width: 2,
-        height: 50,
-        displayValue: true,
-        fontSize: 12,
-        textMargin: 5,
-      });
-
-      res.setHeader("Content-Type", "image/svg+xml");
-      res.send(canvas.toBuffer());
-    } catch (error) {
-      res.status(500).json({ message: "Failed to generate barcode" });
-    }
-  });
+  // Barcode generation is now handled on the client side
 
   const httpServer = createServer(app);
   return httpServer;

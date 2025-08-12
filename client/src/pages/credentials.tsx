@@ -49,7 +49,7 @@ export default function Credentials() {
     }
   };
 
-  const generateCredentialCanvas = () => {
+  const generateCredentialCanvas = async () => {
     const canvas = canvasRef.current;
     if (!canvas || !selectedEmployee) return;
 
@@ -111,62 +111,87 @@ export default function Credentials() {
     ctx.fillStyle = '#F5F5F5';
     ctx.fillRect(width - 149, 121, 98, 118);
 
-    // Generate barcode using Code128
-    try {
-      const barcodeCanvas = document.createElement('canvas');
-      const barcodeCtx = barcodeCanvas.getContext('2d');
-      if (barcodeCtx) {
-        // Import JsBarcode dynamically
-        import('jsbarcode').then(({ default: JsBarcode }) => {
-          JsBarcode(barcodeCanvas, selectedEmployee.barcode || selectedEmployee.employeeId, {
-            format: "CODE128",
-            width: 2,
-            height: 40,
-            displayValue: true,
-            fontSize: 12,
-            textAlign: "center",
-            textPosition: "bottom",
-            marginTop: 10,
-            marginBottom: 5,
-          });
+    // Load employee photo if available
+    if (selectedEmployee.photo) {
+      try {
+        const img = new Image();
+        const photoUrl = createImageUrl(new Uint8Array(selectedEmployee.photo.data));
+        img.onload = () => {
+          ctx.drawImage(img, width - 149, 121, 98, 118);
+        };
+        img.src = photoUrl;
+      } catch (error) {
+        console.error('Error loading employee photo:', error);
+      }
+    }
 
-          // Draw the barcode onto the main canvas
-          const barcodeY = height - 80;
-          const barcodeWidth = Math.min(barcodeCanvas.width, width - 80);
-          const barcodeX = (width - barcodeWidth) / 2;
-          
-          ctx.drawImage(barcodeCanvas, barcodeX, barcodeY - 20, barcodeWidth, 60);
-        }).catch(() => {
-          // Fallback to simple barcode representation
-          ctx.fillStyle = '#000000';
-          const barcodeY = height - 80;
-          for (let i = 0; i < 40; i++) {
-            const x = 40 + (i * 15);
-            const barHeight = (selectedEmployee.barcode || selectedEmployee.employeeId).charCodeAt(i % (selectedEmployee.barcode || selectedEmployee.employeeId).length) % 2 === 0 ? 30 : 20;
-            ctx.fillRect(x, barcodeY, 8, barHeight);
-          }
-          // Barcode text
-          ctx.fillStyle = '#000000';
-          ctx.font = '12px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(selectedEmployee.barcode || selectedEmployee.employeeId, width / 2, barcodeY + 50);
-        });
+    // Generate barcode using Code128
+    const barcodeY = height - 80;
+    const barcodeText = selectedEmployee.barcode || selectedEmployee.employeeId;
+
+    try {
+      const { default: JsBarcode } = await import('jsbarcode');
+      const barcodeCanvas = document.createElement('canvas');
+
+      // Configuración mejorada para el código de barras
+      JsBarcode(barcodeCanvas, barcodeText, {
+        format: "CODE128",
+        width: 3,
+        height: 50,
+        displayValue: true,
+        fontSize: 14,
+        textAlign: "center",
+        textPosition: "bottom",
+        marginTop: 5,
+        marginBottom: 5,
+        marginLeft: 10,
+        marginRight: 10,
+        background: "#FFFFFF",
+        lineColor: "#000000"
+      });
+
+      // Asegurar que el canvas del código de barras se haya generado correctamente
+      if (barcodeCanvas.width > 0 && barcodeCanvas.height > 0) {
+        const barcodeWidth = Math.min(barcodeCanvas.width, width - 80);
+        const barcodeX = (width - barcodeWidth) / 2;
+
+        ctx.drawImage(barcodeCanvas, barcodeX, barcodeY - 25, barcodeWidth, barcodeCanvas.height);
+      } else {
+        throw new Error('Barcode canvas generation failed');
       }
     } catch (error) {
-      // Fallback to simple representation
-      console.error('Error generating barcode:', error);
+      // Fallback mejorado para representación simple del código de barras
+      console.error('Error generating barcode, using fallback:', error);
+
+      // Dibuja barras del código de barras más realistas
       ctx.fillStyle = '#000000';
-      const barcodeY = height - 80;
-      for (let i = 0; i < 40; i++) {
-        const x = 40 + (i * 15);
-        const barHeight = (selectedEmployee.barcode || selectedEmployee.employeeId).charCodeAt(i % (selectedEmployee.barcode || selectedEmployee.employeeId).length) % 2 === 0 ? 30 : 20;
-        ctx.fillRect(x, barcodeY, 8, barHeight);
+      const barWidth = 3;
+      const barSpacing = 2;
+      const totalBars = Math.min(barcodeText.length * 8, 50);
+      const totalWidth = totalBars * (barWidth + barSpacing);
+      const startX = (width - totalWidth) / 2;
+
+      for (let i = 0; i < totalBars; i++) {
+        const x = startX + (i * (barWidth + barSpacing));
+        const charIndex = Math.floor(i / 8);
+        const barIndex = i % 8;
+        const charCode = barcodeText.charCodeAt(charIndex) || 65; // Default to 'A'
+
+        // Varía la altura de las barras basándose en el código del carácter
+        const heightVariation = ((charCode + barIndex) % 3) * 5;
+        const barHeight = 35 + heightVariation;
+
+        // Alterna entre barras gruesas y delgadas
+        const currentBarWidth = ((charCode + barIndex) % 2 === 0) ? barWidth : barWidth + 1;
+
+        ctx.fillRect(x, barcodeY - 10, currentBarWidth, barHeight);
       }
-      // Barcode text
+
+      // Texto del código de barras
       ctx.fillStyle = '#000000';
-      ctx.font = '12px Arial';
+      ctx.font = '14px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText(selectedEmployee.barcode || selectedEmployee.employeeId, width / 2, barcodeY + 50);
+      ctx.fillText(barcodeText, width / 2, barcodeY + 40);
     }
 
     // Bottom accent bar
@@ -174,7 +199,7 @@ export default function Credentials() {
     ctx.fillRect(0, height - 20, width, 20);
   };
 
-  const downloadCredential = () => {
+  const downloadCredential = async () => {
     if (!selectedEmployee) {
       toast({
         title: "Error",
@@ -184,24 +209,35 @@ export default function Credentials() {
       return;
     }
 
-    generateCredentialCanvas();
-    
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    try {
+      await generateCredentialCanvas();
 
-    // Create download link
-    const link = document.createElement('a');
-    link.download = `credencial-${selectedEmployee.employeeId}.png`;
-    link.href = canvas.toDataURL();
-    link.click();
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    toast({
-      title: "Credencial Descargada",
-      description: "La credencial se ha descargado exitosamente.",
-    });
+      // Wait a bit for canvas to be fully rendered
+      setTimeout(() => {
+        // Create download link
+        const link = document.createElement('a');
+        link.download = `credencial-${selectedEmployee.employeeId}.png`;
+        link.href = canvas.toDataURL();
+        link.click();
+
+        toast({
+          title: "Credencial Descargada",
+          description: "La credencial se ha descargado exitosamente.",
+        });
+      }, 500);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Error al generar la credencial.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const printCredential = () => {
+  const printCredential = async () => {
     if (!selectedEmployee) {
       toast({
         title: "Error",
@@ -211,36 +247,47 @@ export default function Credentials() {
       return;
     }
 
-    generateCredentialCanvas();
-    
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    try {
+      await generateCredentialCanvas();
 
-    // Create print window
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    const imageUrl = canvas.toDataURL();
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Credencial - ${selectedEmployee.fullName}</title>
-          <style>
-            body { margin: 0; padding: 20px; text-align: center; }
-            img { max-width: 100%; height: auto; }
-            @media print {
-              body { margin: 0; padding: 0; }
-              img { width: 85mm; height: 54mm; }
-            }
-          </style>
-        </head>
-        <body>
-          <img src="${imageUrl}" alt="Credencial" />
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
+      // Wait a bit for canvas to be fully rendered
+      setTimeout(() => {
+        // Create print window
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+
+        const imageUrl = canvas.toDataURL();
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>Credencial - ${selectedEmployee.fullName}</title>
+              <style>
+                body { margin: 0; padding: 20px; text-align: center; }
+                img { max-width: 100%; height: auto; }
+                @media print {
+                  body { margin: 0; padding: 0; }
+                  img { width: 85mm; height: 54mm; }
+                }
+              </style>
+            </head>
+            <body>
+              <img src="${imageUrl}" alt="Credencial" />
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+      }, 500);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Error al generar la credencial.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -251,7 +298,7 @@ export default function Credentials() {
             <h2 className="text-2xl font-bold text-gray-900 mb-6">
               Generador de Credenciales
             </h2>
-            
+
             <div className="grid lg:grid-cols-2 gap-8">
               {/* Credential Preview */}
               <div>
@@ -265,7 +312,7 @@ export default function Credentials() {
                         {/* Header with logo and ID */}
                         <div className="flex justify-between items-start mb-3">
                           <div className="flex items-center space-x-2">
-                            <div 
+                            <div
                               className="w-8 h-8 rounded-full flex items-center justify-center"
                               style={{ backgroundColor: primaryColor }}
                             >
@@ -284,7 +331,7 @@ export default function Credentials() {
                             </p>
                           </div>
                         </div>
-                        
+
                         {/* Employee info and photo */}
                         <div className="flex space-x-3 flex-1">
                           <div className="flex-1">
@@ -295,11 +342,11 @@ export default function Credentials() {
                               ÁREA: {selectedEmployee.department.toUpperCase()}
                             </p>
                           </div>
-                          
+
                           {selectedEmployee.photo ? (
-                            <img 
-                              src={createImageUrl(new Uint8Array(selectedEmployee.photo.data))} 
-                              alt="Empleado" 
+                            <img
+                              src={createImageUrl(new Uint8Array(selectedEmployee.photo.data))}
+                              alt="Empleado"
                               className="w-16 h-16 rounded-lg object-cover border-2 border-gray-200"
                             />
                           ) : (
@@ -308,21 +355,31 @@ export default function Credentials() {
                             </div>
                           )}
                         </div>
-                        
+
                         {/* Barcode at bottom */}
                         <div className="mt-3 pt-2 border-t border-gray-200">
                           <div className="text-center">
-                            <div className="text-xs font-mono mb-1">
-                              ||||||||||||||||||||||||||||||||||||||||
+                            <div className="flex justify-center items-center mb-1">
+                              {Array.from({ length: 30 }, (_, i) => (
+                                <div
+                                  key={i}
+                                  className="bg-black"
+                                  style={{
+                                    width: `${(selectedEmployee.employeeId.charCodeAt(i % selectedEmployee.employeeId.length) % 3) + 1}px`,
+                                    height: `${12 + ((selectedEmployee.employeeId.charCodeAt(i % selectedEmployee.employeeId.length) % 2) * 3)}px`,
+                                    marginRight: '1px'
+                                  }}
+                                />
+                              ))}
                             </div>
-                            <p className="text-xs text-gray-600">
+                            <p className="text-xs text-gray-600 font-mono">
                               {selectedEmployee.employeeId}
                             </p>
                           </div>
                         </div>
                       </div>
                       {/* Accent bar */}
-                      <div 
+                      <div
                         className="h-2 rounded-b-lg"
                         style={{ backgroundColor: primaryColor }}
                       />
@@ -373,9 +430,9 @@ export default function Credentials() {
                               id="logo-upload"
                             />
                             <Label htmlFor="logo-upload" className="flex-1 cursor-pointer">
-                              <Button 
-                                type="button" 
-                                variant="outline" 
+                              <Button
+                                type="button"
+                                variant="outline"
                                 className="w-full tablet-input"
                                 data-testid="upload-logo"
                                 asChild

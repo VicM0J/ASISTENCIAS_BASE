@@ -22,7 +22,7 @@ export default function Employees() {
     const matchesSearch = employee.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          employee.employeeId.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDepartment = departmentFilter === "all" || employee.department === departmentFilter;
-    
+
     return matchesSearch && matchesDepartment;
   }) || [];
 
@@ -48,7 +48,7 @@ export default function Employees() {
           <h2 className="text-2xl font-bold text-gray-900 mb-4 md:mb-0">
             Gestión de Empleados
           </h2>
-          
+
           <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
             <Select value={filterPeriod} onValueChange={setFilterPeriod}>
               <SelectTrigger className="w-40" data-testid="period-filter">
@@ -60,7 +60,7 @@ export default function Employees() {
                 <SelectItem value="year">Este año</SelectItem>
               </SelectContent>
             </Select>
-            
+
             <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
               <SelectTrigger className="w-48" data-testid="department-filter">
                 <SelectValue placeholder="Todos los departamentos" />
@@ -72,7 +72,7 @@ export default function Employees() {
                 ))}
               </SelectContent>
             </Select>
-            
+
             <Button className="tablet-button" data-testid="apply-filters">
               <Filter className="h-4 w-4 mr-2" />
               Filtrar
@@ -130,7 +130,7 @@ export default function Employees() {
                       filteredEmployees.map((employee: any) => {
                         const photoUrl = employee.photo ? 
                           createImageUrl(new Uint8Array(employee.photo.data)) : null;
-                        
+
                         return (
                           <tr key={employee.id} className="hover:bg-gray-50" data-testid={`employee-row-${employee.id}`}>
                             <td className="px-6 py-4">
@@ -174,25 +174,19 @@ export default function Employees() {
                               </Badge>
                             </td>
                             <td className="px-6 py-4">
-                              <div className="flex space-x-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-primary hover:text-primary/80"
-                                  data-testid={`view-employee-${employee.id}`}
-                                >
-                                  <Eye className="h-4 w-4 mr-1" />
-                                  Ver detalles
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-gray-600 hover:text-gray-800"
-                                  data-testid={`edit-employee-${employee.id}`}
-                                >
-                                  <Edit className="h-4 w-4 mr-1" />
-                                  Editar
-                                </Button>
+                              <div className="flex gap-2">
+                                <Link href={`/employees/${employee.id}`}>
+                                  <Button size="sm" variant="outline" className="text-green-600 hover:text-green-700">
+                                    <Eye className="h-4 w-4 mr-1" />
+                                    Ver Detalles
+                                  </Button>
+                                </Link>
+                                <Link href={`/employees/edit/${employee.id}`}>
+                                  <Button size="sm" variant="outline" className="text-blue-600 hover:text-blue-700">
+                                    <Edit className="h-4 w-4 mr-1" />
+                                    Editar
+                                  </Button>
+                                </Link>
                               </div>
                             </td>
                           </tr>
