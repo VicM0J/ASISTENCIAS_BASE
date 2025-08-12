@@ -61,6 +61,10 @@ export default {
           border: "var(--sidebar-border)",
           ring: "var(--sidebar-ring)",
         },
+        // Custom colors for attendance system
+        navy: "var(--navy)",
+        turquoise: "var(--turquoise)",
+        "jasana-blue": "var(--jasana-blue)",
       },
       fontFamily: {
         sans: ["var(--font-sans)"],

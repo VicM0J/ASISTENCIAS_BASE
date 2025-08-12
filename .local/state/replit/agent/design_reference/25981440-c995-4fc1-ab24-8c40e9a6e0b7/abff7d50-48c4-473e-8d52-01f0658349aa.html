@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Control de Asistencias - JASANA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'navy': '#1e293b',
+                        'turquoise': '#0891b2',
+                        'jasana-blue': '#334155'
+                    },
+                    fontFamily: {
+                        'sans': ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        };
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="bg-slate-50 font-sans">
+    <!-- @COMPONENT: NavigationSidebar [menu items, active state] -->
+    <div class="flex h-screen">
+        <!-- Sidebar Navigation -->
+        <div class="w-64 bg-navy text-white shadow-xl">
+            <div class="p-6 border-b border-slate-600">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-turquoise rounded-lg flex items-center justify-center">
+                        <i class="fas fa-user-clock text-white text-lg"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-white">JASANA</h1>
+                        <p class="text-slate-300 text-sm">Control de Asistencias</p>
+                    </div>
+                </div>
+            </div>
+            
+            <nav class="mt-6">
+                <a href="#" class="flex items-center px-6 py-3 text-turquoise bg-slate-700 border-r-4 border-turquoise" data-section="checkin">
+                    <i class="fas fa-qrcode mr-3"></i>
+                    <span>Check In/Out</span>
+                </a>
+                <a href="#" class="flex items-center px-6 py-3 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors" data-section="employees">
+                    <i class="fas fa-users mr-3"></i>
+                    <span>Gestión de Empleados</span>
+                </a>
+                <a href="#" class="flex items-center px-6 py-3 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors" data-section="add-employee">
+                    <i class="fas fa-user-plus mr-3"></i>
+                    <span>Añadir Empleado</span>
+                </a>
+                <a href="#" class="flex items-center px-6 py-3 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors" data-section="credentials">
+                    <i class="fas fa-id-card mr-3"></i>
+                    <span>Generar Credenciales</span>
+                </a>
+                <a href="#" class="flex items-center px-6 py-3 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors" data-section="reports">
+                    <i class="fas fa-file-excel mr-3"></i>
+                    <span>Reportes Excel</span>
+                </a>
+                <a href="#" class="flex items-center px-6 py-3 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors" data-section="settings">
+                    <i class="fas fa-cog mr-3"></i>
+                    <span>Configuraciones</span>
+                </a>
+            </nav>
+        </div>
+        <!-- @END_COMPONENT: NavigationSidebar -->
+
+        <!-- Main Content Area -->
+        <div class="flex-1 overflow-auto">
+            <!-- @COMPONENT: CheckInInterface [barcode scanning, camera integration] -->
+            <div id="checkin-section" class="section-content">
+                <!-- Header -->
+                <div class="bg-white shadow-sm border-b px-8 py-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-navy">Check In / Check Out</h2>
+                            <p class="text-slate-600">Registra entradas y salidas de empleados</p>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-sm text-slate-500">Fecha actual</div>
+                            <div class="text-xl font-semibold text-navy" id="current-date">Viernes, 20 Diciembre 2024</div>
+                            <div class="text-lg text-turquoise" id="current-time">14:30:25</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scanner Interface -->
+                <div class="p-8">
+                    <div class="max-w-4xl mx-auto">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <!-- Camera Scanner -->
+                            <div class="bg-white rounded-xl shadow-lg p-8">
+                                <div class="text-center mb-6">
+                                    <div class="w-16 h-16 bg-turquoise rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <i class="fas fa-camera text-white text-2xl"></i>
+                                    </div>
+                                    <h3 class="text-xl font-semibold text-navy mb-2">Escaneo por Cámara</h3>
+                                    <p class="text-slate-600">Posiciona el código de barras frente a la cámara</p>
+                                </div>
+                                
+                                <!-- Camera View -->
+                                <div class="bg-slate-100 rounded-lg h-64 flex items-center justify-center mb-6 relative overflow-hidden">
+                                    <!-- Placeholder for camera feed -->
+                                    <div class="absolute inset-4 border-2 border-dashed border-turquoise rounded-lg flex items-center justify-center">
+                                        <div class="text-center">
+                                            <i class="fas fa-video text-4xl text-slate-400 mb-2"></i>
+                                            <p class="text-slate-500">Vista de cámara activa</p>
+                                            <!-- TODO: Implement camera feed integration -->
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Scanning overlay -->
+                                    <div class="absolute inset-0 pointer-events-none">
+                                        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-24 border-2 border-red-500 rounded-lg">
+                                            <div class="absolute -top-1 -left-1 w-4 h-4 border-t-2 border-l-2 border-red-500"></div>
+                                            <div class="absolute -top-1 -right-1 w-4 h-4 border-t-2 border-r-2 border-red-500"></div>
+                                            <div class="absolute -bottom-1 -left-1 w-4 h-4 border-b-2 border-l-2 border-red-500"></div>
+                                            <div class="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-red-500"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <button class="w-full bg-turquoise text-white py-3 rounded-lg font-semibold hover:bg-cyan-600 transition-colors" data-event="click:toggleCamera">
+                                    <i class="fas fa-play mr-2"></i>
+                                    Iniciar Escaneo
+                                </button>
+                            </div>
+
+                            <!-- Manual Input -->
+                            <div class="bg-white rounded-xl shadow-lg p-8">
+                                <div class="text-center mb-6">
+                                    <div class="w-16 h-16 bg-navy rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <i class="fas fa-keyboard text-white text-2xl"></i>
+                                    </div>
+                                    <h3 class="text-xl font-semibold text-navy mb-2">Entrada Manual</h3>
+                                    <p class="text-slate-600">Ingresa el ID del empleado manualmente</p>
+                                </div>
+                                
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-2">ID del Empleado</label>
+                                        <input type="text" placeholder="Ej: MOJV040815" 
+                                               class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise text-center text-lg font-mono"
+                                               data-bind="employeeId">
+                                    </div>
+                                    
+                                    <button class="w-full bg-navy text-white py-3 rounded-lg font-semibold hover:bg-slate-700 transition-colors" data-event="click:manualCheckIn">
+                                        <i class="fas fa-sign-in-alt mr-2"></i>
+                                        Registrar Asistencia
+                                    </button>
+                                </div>
+                                
+                                <!-- Recent Activity -->
+                                <div class="mt-8 pt-6 border-t border-slate-200">
+                                    <h4 class="font-semibold text-slate-700 mb-3">Actividad Reciente</h4>
+                                    <div class="space-y-2 text-sm">
+                                        <div class="flex justify-between items-center p-2 bg-green-50 rounded">
+                                            <span class="text-green-700">MOJV040815 - Entrada</span>
+                                            <span class="text-green-600">08:30</span>
+                                        </div>
+                                        <div class="flex justify-between items-center p-2 bg-red-50 rounded">
+                                            <span class="text-red-700">LUPE123456 - Salida</span>
+                                            <span class="text-red-600">17:45</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Status Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mt-8">
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <div class="flex items-center">
+                                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-sign-in-alt text-green-600 text-xl"></i>
+                                    </div>
+                                    <div class="ml-4">
+                                        <p class="text-sm text-slate-600">Entradas Hoy</p>
+                                        <p class="text-2xl font-bold text-navy" data-bind="todayCheckIns">45</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <div class="flex items-center">
+                                    <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-sign-out-alt text-red-600 text-xl"></i>
+                                    </div>
+                                    <div class="ml-4">
+                                        <p class="text-sm text-slate-600">Salidas Hoy</p>
+                                        <p class="text-2xl font-bold text-navy" data-bind="todayCheckOuts">38</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <div class="flex items-center">
+                                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-users text-blue-600 text-xl"></i>
+                                    </div>
+                                    <div class="ml-4">
+                                        <p class="text-sm text-slate-600">Empleados Activos</p>
+                                        <p class="text-2xl font-bold text-navy" data-bind="activeEmployees">7</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <div class="flex items-center">
+                                    <div class="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-clock text-yellow-600 text-xl"></i>
+                                    </div>
+                                    <div class="ml-4">
+                                        <p class="text-sm text-slate-600">Tiempo Promedio</p>
+                                        <p class="text-2xl font-bold text-navy" data-bind="averageTime">8.5h</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: CheckInInterface -->
+
+            <!-- @COMPONENT: EmployeeManagement [employee list, filters, details modal] -->
+            <div id="employees-section" class="section-content hidden">
+                <!-- Header -->
+                <div class="bg-white shadow-sm border-b px-8 py-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-navy">Gestión de Empleados</h2>
+                            <p class="text-slate-600">Administra empleados y consulta historiales de asistencia</p>
+                        </div>
+                        <button class="bg-turquoise text-white px-6 py-2 rounded-lg hover:bg-cyan-600 transition-colors" data-event="click:addEmployee">
+                            <i class="fas fa-plus mr-2"></i>
+                            Añadir Empleado
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-8">
+                    <!-- Filters -->
+                    <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+                        <h3 class="text-lg font-semibold text-navy mb-4">Filtros de Búsqueda</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Buscar por Nombre/ID</label>
+                                <input type="text" placeholder="Nombre o ID del empleado" 
+                                       class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise"
+                                       data-bind="searchTerm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Departamento</label>
+                                <select class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise" data-bind="departmentFilter">
+                                    <option value="">Todos los departamentos</option>
+                                    <option value="sistemas">Sistemas</option>
+                                    <option value="recursos-humanos">Recursos Humanos</option>
+                                    <option value="ventas">Ventas</option>
+                                    <option value="administracion">Administración</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Período</label>
+                                <select class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise" data-bind="periodFilter">
+                                    <option value="week">Última semana (Vie-Jue)</option>
+                                    <option value="month">Este mes</option>
+                                    <option value="year">Este año</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <button class="w-full bg-navy text-white py-2 rounded-lg hover:bg-slate-700 transition-colors" data-event="click:applyFilters">
+                                    <i class="fas fa-search mr-2"></i>
+                                    Buscar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Employee List -->
+                    <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                        <div class="px-6 py-4 border-b border-slate-200">
+                            <h3 class="text-lg font-semibold text-navy">Lista de Empleados</h3>
+                        </div>
+                        
+                        <!-- @MAP: employees.map(employee => ( -->
+                        <div class="divide-y divide-slate-200">
+                            <div class="px-6 py-4 hover:bg-slate-50 transition-colors">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center space-x-4">
+                                        <!-- Professional headshot of a young man in business attire -->
+                                        <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=100&h=100" 
+                                             alt="Foto de Victor Manuel" 
+                                             class="w-12 h-12 rounded-full object-cover">
+                                        <div>
+                                            <h4 class="font-semibold text-navy" data-bind="employee.name">Victor Manuel Montaño Juanpedro</h4>
+                                            <p class="text-sm text-slate-600">ID: <span data-bind="employee.id">MOJV040815</span> • <span data-bind="employee.department">Sistemas</span></p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center space-x-4">
+                                        <div class="text-right">
+                                            <p class="text-sm text-slate-600">Horas esta semana</p>
+                                            <p class="font-semibold text-navy" data-bind="employee.weeklyHours">42.5h</p>
+                                        </div>
+                                        <div class="flex space-x-2">
+                                            <button class="bg-turquoise text-white px-4 py-2 rounded-lg hover:bg-cyan-600 transition-colors text-sm" data-event="click:viewDetails" data-employee-id="MOJV040815">
+                                                <i class="fas fa-eye mr-1"></i>
+                                                Ver Detalles
+                                            </button>
+                                            <button class="bg-slate-500 text-white px-4 py-2 rounded-lg hover:bg-slate-600 transition-colors text-sm" data-event="click:editEmployee" data-employee-id="MOJV040815">
+                                                <i class="fas fa-edit mr-1"></i>
+                                                Editar
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="px-6 py-4 hover:bg-slate-50 transition-colors">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center space-x-4">
+                                        <!-- Professional headshot of a woman with short hair in business attire -->
+                                        <img src="https://pixabay.com/get/ge88bced83fcf43099e7262ac88d0ab48c126e75b3492a8d8329def1bd8d9b1439ca76f7530c3571f452c10fb9be2973436bdc9ea04d8d664a5524a15c1f33e2c_1280.jpg" 
+                                             alt="Foto de Maria Guadalupe" 
+                                             class="w-12 h-12 rounded-full object-cover">
+                                        <div>
+                                            <h4 class="font-semibold text-navy" data-bind="employee.name">María Guadalupe Hernández</h4>
+                                            <p class="text-sm text-slate-600">ID: <span data-bind="employee.id">HEGU789123</span> • <span data-bind="employee.department">Recursos Humanos</span></p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center space-x-4">
+                                        <div class="text-right">
+                                            <p class="text-sm text-slate-600">Horas esta semana</p>
+                                            <p class="font-semibold text-navy" data-bind="employee.weeklyHours">40.0h</p>
+                                        </div>
+                                        <div class="flex space-x-2">
+                                            <button class="bg-turquoise text-white px-4 py-2 rounded-lg hover:bg-cyan-600 transition-colors text-sm" data-event="click:viewDetails" data-employee-id="HEGU789123">
+                                                <i class="fas fa-eye mr-1"></i>
+                                                Ver Detalles
+                                            </button>
+                                            <button class="bg-slate-500 text-white px-4 py-2 rounded-lg hover:bg-slate-600 transition-colors text-sm" data-event="click:editEmployee" data-employee-id="HEGU789123">
+                                                <i class="fas fa-edit mr-1"></i>
+                                                Editar
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="px-6 py-4 hover:bg-slate-50 transition-colors">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center space-x-4">
+                                        <!-- Professional headshot of a man in formal business suit -->
+                                        <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=100&h=100" 
+                                             alt="Foto de Carlos Roberto" 
+                                             class="w-12 h-12 rounded-full object-cover">
+                                        <div>
+                                            <h4 class="font-semibold text-navy" data-bind="employee.name">Carlos Roberto Martínez</h4>
+                                            <p class="text-sm text-slate-600">ID: <span data-bind="employee.id">MARC456789</span> • <span data-bind="employee.department">Ventas</span></p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center space-x-4">
+                                        <div class="text-right">
+                                            <p class="text-sm text-slate-600">Horas esta semana</p>
+                                            <p class="font-semibold text-navy" data-bind="employee.weeklyHours">45.0h</p>
+                                        </div>
+                                        <div class="flex space-x-2">
+                                            <button class="bg-turquoise text-white px-4 py-2 rounded-lg hover:bg-cyan-600 transition-colors text-sm" data-event="click:viewDetails" data-employee-id="MARC456789">
+                                                <i class="fas fa-eye mr-1"></i>
+                                                Ver Detalles
+                                            </button>
+                                            <button class="bg-slate-500 text-white px-4 py-2 rounded-lg hover:bg-slate-600 transition-colors text-sm" data-event="click:editEmployee" data-employee-id="MARC456789">
+                                                <i class="fas fa-edit mr-1"></i>
+                                                Editar
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- @END_MAP )) -->
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: EmployeeManagement -->
+
+            <!-- @COMPONENT: AddEmployeeForm [form validation, photo upload] -->
+            <div id="add-employee-section" class="section-content hidden">
+                <!-- Header -->
+                <div class="bg-white shadow-sm border-b px-8 py-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-navy">Añadir Nuevo Empleado</h2>
+                        <p class="text-slate-600">Completa la información del empleado</p>
+                    </div>
+                </div>
+
+                <div class="p-8">
+                    <div class="max-w-4xl mx-auto">
+                        <div class="bg-white rounded-xl shadow-lg p-8">
+                            <form class="space-y-6" data-event="submit:addNewEmployee">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <!-- Left Column -->
+                                    <div class="space-y-6">
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-700 mb-2">ID del Empleado *</label>
+                                            <input type="text" required placeholder="Ej: MOJV040815" 
+                                                   class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise"
+                                                   data-bind="newEmployee.id">
+                                            <p class="text-xs text-slate-500 mt-1">Debe ser único en el sistema</p>
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-700 mb-2">Nombre Completo *</label>
+                                            <input type="text" required placeholder="Nombre completo del empleado" 
+                                                   class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise"
+                                                   data-bind="newEmployee.fullName">
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-700 mb-2">Área o Departamento *</label>
+                                            <select required class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise" data-bind="newEmployee.department">
+                                                <option value="">Selecciona un departamento</option>
+                                                <option value="sistemas">Sistemas</option>
+                                                <option value="recursos-humanos">Recursos Humanos</option>
+                                                <option value="ventas">Ventas</option>
+                                                <option value="administracion">Administración</option>
+                                                <option value="marketing">Marketing</option>
+                                                <option value="finanzas">Finanzas</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-700 mb-2">Horario Laboral *</label>
+                                            <select required class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise" data-bind="newEmployee.schedule">
+                                                <option value="">Selecciona un horario</option>
+                                                <option value="administrativo">Horario Administrativo (8:00 - 17:00)</option>
+                                                <option value="horario1">Horario 1 (7:00 - 16:00)</option>
+                                                <option value="horario2">Horario 2 (9:00 - 18:00)</option>
+                                                <option value="personalizado">Personalizado</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-700 mb-2">Código de Barras</label>
+                                            <input type="text" placeholder="Se generará automáticamente si se deja vacío" 
+                                                   class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise"
+                                                   data-bind="newEmployee.barcode">
+                                            <p class="text-xs text-slate-500 mt-1">Si no se especifica, se usará el ID del empleado</p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Right Column -->
+                                    <div class="space-y-6">
+                                        <!-- Photo Upload -->
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-700 mb-2">Fotografía del Empleado *</label>
+                                            <div class="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-turquoise transition-colors">
+                                                <div id="photo-preview" class="hidden">
+                                                    <img id="preview-image" src="" alt="Vista previa" class="w-32 h-32 rounded-full mx-auto object-cover mb-4">
+                                                    <button type="button" class="text-sm text-red-600 hover:text-red-800" data-event="click:removePhoto">
+                                                        <i class="fas fa-trash mr-1"></i>
+                                                        Eliminar foto
+                                                    </button>
+                                                </div>
+                                                <div id="upload-area" class="">
+                                                    <i class="fas fa-camera text-4xl text-slate-400 mb-4"></i>
+                                                    <p class="text-slate-600 mb-2">Arrastra una imagen aquí o</p>
+                                                    <input type="file" id="photo-input" accept="image/*" class="hidden" data-implementation="Handle file upload and preview">
+                                                    <label for="photo-input" class="bg-turquoise text-white px-4 py-2 rounded-lg cursor-pointer hover:bg-cyan-600 transition-colors inline-block">
+                                                        Seleccionar Archivo
+                                                    </label>
+                                                    <p class="text-xs text-slate-500 mt-2">JPG, PNG o GIF hasta 5MB</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Preview Card -->
+                                        <div class="bg-slate-50 rounded-lg p-6">
+                                            <h4 class="font-semibold text-navy mb-4">Vista Previa de Credencial</h4>
+                                            <div class="bg-white rounded-lg p-4 border-2 border-slate-200" style="width: 340px; height: 216px; margin: 0 auto; position: relative;">
+                                                <!-- Credential Preview (85mm x 54mm scaled) -->
+                                                <div class="flex items-start justify-between mb-2">
+                                                    <div class="text-xs font-bold text-navy">
+                                                        ID: <span data-bind-preview="newEmployee.id">XXXXXXX</span>
+                                                    </div>
+                                                    <div class="w-8 h-8 bg-navy rounded text-white text-xs flex items-center justify-center">
+                                                        J
+                                                    </div>
+                                                </div>
+                                                <div class="flex items-start space-x-3">
+                                                    <div class="w-16 h-16 bg-slate-200 rounded-lg flex items-center justify-center">
+                                                        <i class="fas fa-user text-slate-400"></i>
+                                                    </div>
+                                                    <div class="flex-1 min-w-0">
+                                                        <h5 class="text-sm font-bold text-navy truncate" data-bind-preview="newEmployee.fullName">NOMBRE DEL EMPLEADO</h5>
+                                                        <p class="text-xs text-slate-600" data-bind-preview="newEmployee.department">DEPARTAMENTO</p>
+                                                    </div>
+                                                </div>
+                                                <div class="absolute bottom-4 left-4 right-4">
+                                                    <div class="h-6 bg-slate-200 rounded flex items-center justify-center">
+                                                        <div class="text-xs font-mono">||||| ||| || |||||</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Form Actions -->
+                                <div class="flex justify-end space-x-4 pt-6 border-t border-slate-200">
+                                    <button type="button" class="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors" data-event="click:cancelForm">
+                                        Cancelar
+                                    </button>
+                                    <button type="submit" class="px-6 py-3 bg-turquoise text-white rounded-lg hover:bg-cyan-600 transition-colors" data-implementation="Should validate form before submission">
+                                        <i class="fas fa-save mr-2"></i>
+                                        Guardar Empleado
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: AddEmployeeForm -->
+
+            <!-- @COMPONENT: CredentialGenerator [credential design, bulk generation] -->
+            <div id="credentials-section" class="section-content hidden">
+                <!-- Header -->
+                <div class="bg-white shadow-sm border-b px-8 py-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-navy">Generador de Credenciales</h2>
+                        <p class="text-slate-600">Genera credenciales profesionales para empleados</p>
+                    </div>
+                </div>
+
+                <div class="p-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <!-- Selection Panel -->
+                        <div class="space-y-6">
+                            <!-- Employee Selection -->
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-lg font-semibold text-navy mb-4">Seleccionar Empleados</h3>
+                                
+                                <div class="space-y-4">
+                                    <div class="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:bg-slate-50">
+                                        <div class="flex items-center space-x-3">
+                                            <input type="checkbox" class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-employee-id="MOJV040815">
+                                            <!-- Professional headshot of Victor Manuel -->
+                                            <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=40&h=40" 
+                                                 alt="Foto de Victor Manuel" 
+                                                 class="w-8 h-8 rounded-full object-cover">
+                                            <div>
+                                                <p class="font-medium text-navy">Victor Manuel Montaño</p>
+                                                <p class="text-sm text-slate-600">MOJV040815 • Sistemas</p>
+                                            </div>
+                                        </div>
+                                        <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Activo</span>
+                                    </div>
+
+                                    <div class="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:bg-slate-50">
+                                        <div class="flex items-center space-x-3">
+                                            <input type="checkbox" class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-employee-id="HEGU789123">
+                                            <!-- Professional headshot of Maria Guadalupe -->
+                                            <img src="https://pixabay.com/get/gb85c011ce457d1461c161dcbbbe6cbea186a69c7ff0e3d0e06d38b93ad2bd410b7cca53718af2573ccfa431d73cbc4f7ab90ddd3939c9fac98f83f9bb5b6de2e_1280.jpg" 
+                                                 alt="Foto de Maria Guadalupe" 
+                                                 class="w-8 h-8 rounded-full object-cover">
+                                            <div>
+                                                <p class="font-medium text-navy">María Guadalupe Hernández</p>
+                                                <p class="text-sm text-slate-600">HEGU789123 • Recursos Humanos</p>
+                                            </div>
+                                        </div>
+                                        <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Activo</span>
+                                    </div>
+
+                                    <div class="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:bg-slate-50">
+                                        <div class="flex items-center space-x-3">
+                                            <input type="checkbox" class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-employee-id="MARC456789">
+                                            <!-- Professional headshot of Carlos Roberto -->
+                                            <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=40&h=40" 
+                                                 alt="Foto de Carlos Roberto" 
+                                                 class="w-8 h-8 rounded-full object-cover">
+                                            <div>
+                                                <p class="font-medium text-navy">Carlos Roberto Martínez</p>
+                                                <p class="text-sm text-slate-600">MARC456789 • Ventas</p>
+                                            </div>
+                                        </div>
+                                        <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Activo</span>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4 pt-4 border-t border-slate-200">
+                                    <div class="flex justify-between items-center">
+                                        <button class="text-sm text-turquoise hover:text-cyan-600" data-event="click:selectAll">
+                                            Seleccionar todos
+                                        </button>
+                                        <button class="text-sm text-slate-500 hover:text-slate-700" data-event="click:clearSelection">
+                                            Limpiar selección
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Generation Options -->
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-lg font-semibold text-navy mb-4">Opciones de Generación</h3>
+                                
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-2">Formato de Salida</label>
+                                        <select class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise" data-bind="outputFormat">
+                                            <option value="pdf">PDF (Recomendado)</option>
+                                            <option value="png">PNG (Alta calidad)</option>
+                                            <option value="jpg">JPG (Comprimido)</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-2">Disposición</label>
+                                        <select class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise" data-bind="layout">
+                                            <option value="single">Una credencial por página</option>
+                                            <option value="grid-2x5">2x5 credenciales por página</option>
+                                            <option value="grid-3x7">3x7 credenciales por página</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="flex items-center">
+                                        <input type="checkbox" id="include-back" class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-bind="includeBack">
+                                        <label for="include-back" class="ml-2 text-sm text-slate-700">Incluir reverso con información adicional</label>
+                                    </div>
+                                </div>
+
+                                <button class="w-full mt-6 bg-turquoise text-white py-3 rounded-lg hover:bg-cyan-600 transition-colors font-semibold" data-event="click:generateCredentials">
+                                    <i class="fas fa-download mr-2"></i>
+                                    Generar Credenciales
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Preview Panel -->
+                        <div class="space-y-6">
+                            <!-- Live Preview -->
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-lg font-semibold text-navy mb-4">Vista Previa</h3>
+                                
+                                <!-- Credential Preview (Actual Size: 85mm x 54mm) -->
+                                <div class="mx-auto" style="width: 340px; height: 216px;">
+                                    <div class="w-full h-full bg-white border-2 border-slate-200 rounded-lg relative overflow-hidden shadow-lg">
+                                        <!-- Header with Logo and ID -->
+                                        <div class="absolute top-3 left-3 right-3 flex justify-between items-start">
+                                            <div class="flex items-center space-x-2">
+                                                <div class="w-8 h-8 bg-navy rounded-lg flex items-center justify-center">
+                                                    <span class="text-white text-sm font-bold">J</span>
+                                                </div>
+                                                <div class="text-xs">
+                                                    <div class="font-bold text-navy">JASANA</div>
+                                                    <div class="text-slate-600 text-xs">UNIFORMES CORPORATIVOS</div>
+                                                </div>
+                                            </div>
+                                            <div class="text-right">
+                                                <div class="text-xs text-slate-600">ID:</div>
+                                                <div class="font-bold text-navy text-sm">MOJV040815</div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Employee Info and Photo -->
+                                        <div class="absolute top-16 left-3 right-3 flex items-start space-x-3">
+                                            <!-- Employee Photo -->
+                                            <div class="w-16 h-20 bg-slate-100 rounded-lg overflow-hidden flex-shrink-0">
+                                                <!-- Professional headshot of Victor Manuel for credential -->
+                                                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=64&h=80" 
+                                                     alt="Foto credencial Victor Manuel" 
+                                                     class="w-full h-full object-cover">
+                                            </div>
+                                            
+                                            <!-- Employee Details -->
+                                            <div class="flex-1 min-w-0">
+                                                <h4 class="font-bold text-navy text-sm leading-tight">VICTOR MANUEL MONTAÑO JUANPEDRO</h4>
+                                                <p class="text-xs text-slate-600 mt-1">ÁREA: SISTEMAS</p>
+                                            </div>
+                                        </div>
+
+                                        <!-- Barcode -->
+                                        <div class="absolute bottom-3 left-3 right-3">
+                                            <div class="h-8 bg-slate-100 rounded flex items-center justify-center">
+                                                <div class="text-xs font-mono text-slate-700">||||| ||| || ||||||| || ||||| ||| |||||</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Dimensions Info -->
+                                <div class="mt-4 text-center text-sm text-slate-600">
+                                    <p>Dimensiones: 85mm × 54mm (Tamaño estándar)</p>
+                                </div>
+                            </div>
+
+                            <!-- Customization Options -->
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-lg font-semibold text-navy mb-4">Personalización</h3>
+                                
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-2">Color Principal</label>
+                                        <div class="flex space-x-2">
+                                            <button class="w-8 h-8 bg-navy rounded border-2 border-gray-300" data-color="navy" data-event="click:changeColor"></button>
+                                            <button class="w-8 h-8 bg-turquoise rounded border-2 border-transparent" data-color="turquoise" data-event="click:changeColor"></button>
+                                            <button class="w-8 h-8 bg-green-600 rounded border-2 border-transparent" data-color="green" data-event="click:changeColor"></button>
+                                            <button class="w-8 h-8 bg-red-600 rounded border-2 border-transparent" data-color="red" data-event="click:changeColor"></button>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-2">Tamaño de Fuente</label>
+                                        <select class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise" data-bind="fontSize">
+                                            <option value="small">Pequeño</option>
+                                            <option value="medium" selected>Mediano</option>
+                                            <option value="large">Grande</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="flex items-center">
+                                        <input type="checkbox" id="show-department" checked class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-bind="showDepartment">
+                                        <label for="show-department" class="ml-2 text-sm text-slate-700">Mostrar departamento</label>
+                                    </div>
+
+                                    <div class="flex items-center">
+                                        <input type="checkbox" id="rounded-corners" checked class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-bind="roundedCorners">
+                                        <label for="rounded-corners" class="ml-2 text-sm text-slate-700">Esquinas redondeadas</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: CredentialGenerator -->
+
+            <!-- @COMPONENT: ReportsGeneration [excel export, date filters] -->
+            <div id="reports-section" class="section-content hidden">
+                <!-- Header -->
+                <div class="bg-white shadow-sm border-b px-8 py-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-navy">Reportes en Excel</h2>
+                        <p class="text-slate-600">Genera reportes detallados de asistencias</p>
+                    </div>
+                </div>
+
+                <div class="p-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <!-- Report Configuration -->
+                        <div class="bg-white rounded-xl shadow-lg p-6">
+                            <h3 class="text-lg font-semibold text-navy mb-6">Configuración del Reporte</h3>
+                            
+                            <div class="space-y-6">
+                                <!-- Date Range -->
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-3">Período del Reporte</label>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-xs text-slate-600 mb-1">Fecha Inicio</label>
+                                            <input type="date" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise" data-bind="reportStartDate">
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs text-slate-600 mb-1">Fecha Fin</label>
+                                            <input type="date" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise" data-bind="reportEndDate">
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Quick Periods -->
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <button class="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded hover:bg-slate-200 transition-colors" data-event="click:setWeekPeriod">
+                                            Esta semana
+                                        </button>
+                                        <button class="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded hover:bg-slate-200 transition-colors" data-event="click:setMonthPeriod">
+                                            Este mes
+                                        </button>
+                                        <button class="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded hover:bg-slate-200 transition-colors" data-event="click:setYearPeriod">
+                                            Este año
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Department Filter -->
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-2">Filtrar por Departamento</label>
+                                    <select class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise" data-bind="reportDepartment">
+                                        <option value="">Todos los departamentos</option>
+                                        <option value="sistemas">Sistemas</option>
+                                        <option value="recursos-humanos">Recursos Humanos</option>
+                                        <option value="ventas">Ventas</option>
+                                        <option value="administracion">Administración</option>
+                                        <option value="marketing">Marketing</option>
+                                        <option value="finanzas">Finanzas</option>
+                                    </select>
+                                </div>
+
+                                <!-- Report Type -->
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-2">Tipo de Reporte</label>
+                                    <div class="space-y-2">
+                                        <label class="flex items-center">
+                                            <input type="radio" name="reportType" value="summary" checked class="w-4 h-4 text-turquoise border-slate-300 focus:ring-turquoise">
+                                            <span class="ml-2 text-sm text-slate-700">Resumen de Asistencias</span>
+                                        </label>
+                                        <label class="flex items-center">
+                                            <input type="radio" name="reportType" value="detailed" class="w-4 h-4 text-turquoise border-slate-300 focus:ring-turquoise">
+                                            <span class="ml-2 text-sm text-slate-700">Reporte Detallado</span>
+                                        </label>
+                                        <label class="flex items-center">
+                                            <input type="radio" name="reportType" value="overtime" class="w-4 h-4 text-turquoise border-slate-300 focus:ring-turquoise">
+                                            <span class="ml-2 text-sm text-slate-700">Solo Horas Extra</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Additional Options -->
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-3">Opciones Adicionales</label>
+                                    <div class="space-y-2">
+                                        <label class="flex items-center">
+                                            <input type="checkbox" checked class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-bind="includePhotos">
+                                            <span class="ml-2 text-sm text-slate-700">Incluir fotografías</span>
+                                        </label>
+                                        <label class="flex items-center">
+                                            <input type="checkbox" checked class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-bind="includeSignature">
+                                            <span class="ml-2 text-sm text-slate-700">Espacio para firma</span>
+                                        </label>
+                                        <label class="flex items-center">
+                                            <input type="checkbox" class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-bind="includeCharts">
+                                            <span class="ml-2 text-sm text-slate-700">Incluir gráficos</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Generate Button -->
+                                <button class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors font-semibold" data-event="click:generateExcelReport">
+                                    <i class="fas fa-file-excel mr-2"></i>
+                                    Generar Reporte Excel
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Preview and Templates -->
+                        <div class="space-y-6">
+                            <!-- Quick Stats -->
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-lg font-semibold text-navy mb-4">Estadísticas del Período</h3>
+                                
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="text-center p-4 bg-slate-50 rounded-lg">
+                                        <div class="text-2xl font-bold text-navy" data-bind="totalEmployees">45</div>
+                                        <div class="text-sm text-slate-600">Empleados</div>
+                                    </div>
+                                    <div class="text-center p-4 bg-slate-50 rounded-lg">
+                                        <div class="text-2xl font-bold text-turquoise" data-bind="totalCheckIns">1,234</div>
+                                        <div class="text-sm text-slate-600">Check-ins</div>
+                                    </div>
+                                    <div class="text-center p-4 bg-slate-50 rounded-lg">
+                                        <div class="text-2xl font-bold text-green-600" data-bind="averageHours">8.2h</div>
+                                        <div class="text-sm text-slate-600">Promedio diario</div>
+                                    </div>
+                                    <div class="text-center p-4 bg-slate-50 rounded-lg">
+                                        <div class="text-2xl font-bold text-yellow-600" data-bind="totalOvertime">124h</div>
+                                        <div class="text-sm text-slate-600">Horas extra</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Report Templates -->
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-lg font-semibold text-navy mb-4">Plantillas Predefinidas</h3>
+                                
+                                <div class="space-y-3">
+                                    <button class="w-full text-left p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors" data-event="click:useTemplate" data-template="weekly">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <h4 class="font-medium text-navy">Reporte Semanal</h4>
+                                                <p class="text-sm text-slate-600">Asistencias de la semana laboral actual</p>
+                                            </div>
+                                            <i class="fas fa-arrow-right text-slate-400"></i>
+                                        </div>
+                                    </button>
+                                    
+                                    <button class="w-full text-left p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors" data-event="click:useTemplate" data-template="monthly">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <h4 class="font-medium text-navy">Reporte Mensual</h4>
+                                                <p class="text-sm text-slate-600">Resumen completo del mes actual</p>
+                                            </div>
+                                            <i class="fas fa-arrow-right text-slate-400"></i>
+                                        </div>
+                                    </button>
+                                    
+                                    <button class="w-full text-left p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors" data-event="click:useTemplate" data-template="payroll">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <h4 class="font-medium text-navy">Reporte de Nómina</h4>
+                                                <p class="text-sm text-slate-600">Formato especial para cálculo de nómina</p>
+                                            </div>
+                                            <i class="fas fa-arrow-right text-slate-400"></i>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Recent Reports -->
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-lg font-semibold text-navy mb-4">Reportes Recientes</h3>
+                                
+                                <div class="space-y-3">
+                                    <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                                        <div class="flex items-center space-x-3">
+                                            <i class="fas fa-file-excel text-green-600"></i>
+                                            <div>
+                                                <p class="text-sm font-medium text-navy">reporte_diciembre_2024.xlsx</p>
+                                                <p class="text-xs text-slate-600">Generado hace 2 horas</p>
+                                            </div>
+                                        </div>
+                                        <button class="text-turquoise hover:text-cyan-600 text-sm" data-event="click:downloadReport">
+                                            <i class="fas fa-download"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                                        <div class="flex items-center space-x-3">
+                                            <i class="fas fa-file-excel text-green-600"></i>
+                                            <div>
+                                                <p class="text-sm font-medium text-navy">reporte_semanal_48.xlsx</p>
+                                                <p class="text-xs text-slate-600">Generado ayer</p>
+                                            </div>
+                                        </div>
+                                        <button class="text-turquoise hover:text-cyan-600 text-sm" data-event="click:downloadReport">
+                                            <i class="fas fa-download"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: ReportsGeneration -->
+
+            <!-- @COMPONENT: SettingsConfiguration [schedule management, credential customization] -->
+            <div id="settings-section" class="section-content hidden">
+                <!-- Header -->
+                <div class="bg-white shadow-sm border-b px-8 py-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-navy">Configuraciones</h2>
+                        <p class="text-slate-600">Administra horarios y configuraciones del sistema</p>
+                    </div>
+                </div>
+
+                <div class="p-8">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <!-- Schedule Management -->
+                        <div class="space-y-6">
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <div class="flex items-center justify-between mb-6">
+                                    <h3 class="text-lg font-semibold text-navy">Gestión de Horarios</h3>
+                                    <button class="bg-turquoise text-white px-4 py-2 rounded-lg hover:bg-cyan-600 transition-colors text-sm" data-event="click:addSchedule">
+                                        <i class="fas fa-plus mr-1"></i>
+                                        Nuevo Horario
+                                    </button>
+                                </div>
+                                
+                                <!-- Schedule List -->
+                                <div class="space-y-4">
+                                    <!-- Administrative Schedule -->
+                                    <div class="border border-slate-200 rounded-lg p-4">
+                                        <div class="flex items-center justify-between mb-3">
+                                            <h4 class="font-medium text-navy">Horario Administrativo</h4>
+                                            <div class="flex space-x-2">
+                                                <button class="text-turquoise hover:text-cyan-600 text-sm" data-event="click:editSchedule" data-schedule="admin">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Activo</span>
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-2 text-sm text-slate-600">
+                                            <div>Entrada: <span class="font-medium">08:00</span></div>
+                                            <div>Salida: <span class="font-medium">17:00</span></div>
+                                            <div>Desayuno: <span class="font-medium">10:30-11:00</span></div>
+                                            <div>Comida: <span class="font-medium">14:00-15:00</span></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Schedule 1 -->
+                                    <div class="border border-slate-200 rounded-lg p-4">
+                                        <div class="flex items-center justify-between mb-3">
+                                            <h4 class="font-medium text-navy">Horario 1</h4>
+                                            <div class="flex space-x-2">
+                                                <button class="text-turquoise hover:text-cyan-600 text-sm" data-event="click:editSchedule" data-schedule="schedule1">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Activo</span>
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-2 text-sm text-slate-600">
+                                            <div>Entrada: <span class="font-medium">07:00</span></div>
+                                            <div>Salida: <span class="font-medium">16:00</span></div>
+                                            <div>Desayuno: <span class="font-medium">09:30-10:00</span></div>
+                                            <div>Comida: <span class="font-medium">13:00-14:00</span></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Schedule 2 -->
+                                    <div class="border border-slate-200 rounded-lg p-4">
+                                        <div class="flex items-center justify-between mb-3">
+                                            <h4 class="font-medium text-navy">Horario 2</h4>
+                                            <div class="flex space-x-2">
+                                                <button class="text-turquoise hover:text-cyan-600 text-sm" data-event="click:editSchedule" data-schedule="schedule2">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Activo</span>
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-2 text-sm text-slate-600">
+                                            <div>Entrada: <span class="font-medium">09:00</span></div>
+                                            <div>Salida: <span class="font-medium">18:00</span></div>
+                                            <div>Desayuno: <span class="font-medium">11:30-12:00</span></div>
+                                            <div>Comida: <span class="font-medium">15:00-16:00</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- System Settings -->
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-lg font-semibold text-navy mb-6">Configuraciones del Sistema</h3>
+                                
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-2">Tiempo de bloqueo después del check-in</label>
+                                        <select class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise" data-bind="blockingTime">
+                                            <option value="30">30 segundos</option>
+                                            <option value="60" selected>1 minuto</option>
+                                            <option value="120">2 minutos</option>
+                                            <option value="300">5 minutos</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-2">Tolerancia de entrada (minutos)</label>
+                                        <input type="number" min="0" max="60" value="15" 
+                                               class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise"
+                                               data-bind="entryTolerance">
+                                    </div>
+
+                                    <div class="flex items-center">
+                                        <input type="checkbox" id="auto-backup" checked class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-bind="autoBackup">
+                                        <label for="auto-backup" class="ml-2 text-sm text-slate-700">Respaldo automático diario</label>
+                                    </div>
+
+                                    <div class="flex items-center">
+                                        <input type="checkbox" id="camera-audio" class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-bind="cameraAudio">
+                                        <label for="camera-audio" class="ml-2 text-sm text-slate-700">Sonido de confirmación en escaneo</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Credential Design -->
+                        <div class="space-y-6">
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-lg font-semibold text-navy mb-6">Diseño de Credenciales</h3>
+                                
+                                <div class="space-y-6">
+                                    <!-- Color Scheme -->
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-3">Esquema de Colores</label>
+                                        <div class="grid grid-cols-4 gap-3">
+                                            <button class="h-12 rounded-lg border-2 border-turquoise bg-navy" data-color-scheme="default" data-event="click:selectColorScheme">
+                                                <div class="text-xs text-white">Por defecto</div>
+                                            </button>
+                                            <button class="h-12 rounded-lg border-2 border-transparent bg-green-600" data-color-scheme="green" data-event="click:selectColorScheme">
+                                                <div class="text-xs text-white">Verde</div>
+                                            </button>
+                                            <button class="h-12 rounded-lg border-2 border-transparent bg-red-600" data-color-scheme="red" data-event="click:selectColorScheme">
+                                                <div class="text-xs text-white">Rojo</div>
+                                            </button>
+                                            <button class="h-12 rounded-lg border-2 border-transparent bg-purple-600" data-color-scheme="purple" data-event="click:selectColorScheme">
+                                                <div class="text-xs text-white">Morado</div>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Logo Upload -->
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-2">Logo de la Empresa</label>
+                                        <div class="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center">
+                                            <div class="flex items-center justify-center space-x-4">
+                                                <div class="w-12 h-12 bg-navy rounded-lg flex items-center justify-center">
+                                                    <span class="text-white font-bold">J</span>
+                                                </div>
+                                                <div class="text-left">
+                                                    <p class="text-sm text-slate-600">Logo actual</p>
+                                                    <button class="text-xs text-turquoise hover:text-cyan-600" data-event="click:changeLogo">
+                                                        Cambiar logo
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Typography -->
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-2">Tipografía</label>
+                                        <select class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-turquoise focus:border-turquoise" data-bind="credentialFont">
+                                            <option value="inter">Inter (Moderno)</option>
+                                            <option value="roboto">Roboto (Neutro)</option>
+                                            <option value="arial" selected>Arial (Clásico)</option>
+                                            <option value="helvetica">Helvetica (Profesional)</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Layout Options -->
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-3">Elementos a Mostrar</label>
+                                        <div class="space-y-2">
+                                            <label class="flex items-center">
+                                                <input type="checkbox" checked class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-bind="showEmployeeId">
+                                                <span class="ml-2 text-sm text-slate-700">ID del empleado</span>
+                                            </label>
+                                            <label class="flex items-center">
+                                                <input type="checkbox" checked class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-bind="showDepartment">
+                                                <span class="ml-2 text-sm text-slate-700">Departamento</span>
+                                            </label>
+                                            <label class="flex items-center">
+                                                <input type="checkbox" checked class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-bind="showPhoto">
+                                                <span class="ml-2 text-sm text-slate-700">Fotografía</span>
+                                            </label>
+                                            <label class="flex items-center">
+                                                <input type="checkbox" checked class="w-4 h-4 text-turquoise border-slate-300 rounded focus:ring-turquoise" data-bind="showBarcode">
+                                                <span class="ml-2 text-sm text-slate-700">Código de barras</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Database Configuration -->
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-lg font-semibold text-navy mb-6">Configuración de Base de Datos</h3>
+                                
+                                <div class="space-y-4">
+                                    <div class="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                                        <div class="flex items-center space-x-3">
+                                            <i class="fas fa-database text-green-600"></i>
+                                            <div>
+                                                <p class="text-sm font-medium text-green-800">PostgreSQL Conectado</p>
+                                                <p class="text-xs text-green-600">localhost:5432/attendance_db</p>
+                                            </div>
+                                        </div>
+                                        <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Online</span>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <button class="p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors text-sm" data-event="click:backupDatabase">
+                                            <i class="fas fa-download text-turquoise mb-2"></i>
+                                            <div>Respaldar BD</div>
+                                        </button>
+                                        <button class="p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors text-sm" data-event="click:optimizeDatabase">
+                                            <i class="fas fa-cog text-slate-500 mb-2"></i>
+                                            <div>Optimizar</div>
+                                        </button>
+                                    </div>
+
+                                    <div class="text-xs text-slate-500 space-y-1">
+                                        <div>Últimas tablas: employees, attendance_records, schedules</div>
+                                        <div>Último respaldo: Hace 2 horas</div>
+                                        <div>Registros totales: 2,847</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Save Settings -->
+                    <div class="mt-8 flex justify-end">
+                        <button class="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 transition-colors font-semibold" data-event="click:saveSettings">
+                            <i class="fas fa-save mr-2"></i>
+                            Guardar Configuraciones
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: SettingsConfiguration -->
+        </div>
+    </div>
+
+    <!-- @COMPONENT: EmployeeDetailsModal [attendance history, hours summary] -->
+    <div id="employee-details-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50" data-implementation="Modal overlay for employee details">
+        <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-auto">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-6 border-b border-slate-200">
+                <div class="flex items-center space-x-4">
+                    <!-- Professional headshot for modal -->
+                    <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=80&h=80" 
+                         alt="Foto detalle empleado" 
+                         class="w-16 h-16 rounded-full object-cover">
+                    <div>
+                        <h3 class="text-xl font-bold text-navy" data-bind="modal.employeeName">Victor Manuel Montaño Juanpedro</h3>
+                        <p class="text-slate-600">ID: <span data-bind="modal.employeeId">MOJV040815</span> • <span data-bind="modal.employeeDepartment">Sistemas</span></p>
+                    </div>
+                </div>
+                <button class="text-slate-400 hover:text-slate-600" data-event="click:closeModal">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Modal Content -->
+            <div class="p-6">
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-blue-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-blue-600" data-bind="modal.totalHours">168.5h</div>
+                        <div class="text-sm text-blue-700">Horas Totales</div>
+                    </div>
+                    <div class="bg-green-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-green-600" data-bind="modal.avgDaily">8.4h</div>
+                        <div class="text-sm text-green-700">Promedio Diario</div>
+                    </div>
+                    <div class="bg-yellow-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-yellow-600" data-bind="modal.overtimeHours">12.5h</div>
+                        <div class="text-sm text-yellow-700">Horas Extra</div>
+                    </div>
+                    <div class="bg-red-50 rounded-lg p-4 text-center">
+                        <div class="text-2xl font-bold text-red-600" data-bind="modal.absences">2</div>
+                        <div class="text-sm text-red-700">Faltas</div>
+                    </div>
+                </div>
+
+                <!-- Attendance History -->
+                <div class="bg-slate-50 rounded-lg p-4">
+                    <h4 class="font-semibold text-navy mb-4">Historial de Asistencias (Última Semana)</h4>
+                    <div class="space-y-2">
+                        <!-- @MAP: attendanceHistory.map(record => ( -->
+                        <div class="flex items-center justify-between bg-white rounded p-3">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <span class="font-medium">Lunes, 16 Dic</span>
+                            </div>
+                            <div class="flex space-x-6 text-sm text-slate-600">
+                                <span>Entrada: <strong>08:15</strong></span>
+                                <span>Salida: <strong>17:30</strong></span>
+                                <span>Total: <strong>8.25h</strong></span>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between bg-white rounded p-3">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <span class="font-medium">Martes, 17 Dic</span>
+                            </div>
+                            <div class="flex space-x-6 text-sm text-slate-600">
+                                <span>Entrada: <strong>08:00</strong></span>
+                                <span>Salida: <strong>17:45</strong></span>
+                                <span>Total: <strong>8.75h</strong></span>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between bg-white rounded p-3">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <span class="font-medium">Miércoles, 18 Dic</span>
+                            </div>
+                            <div class="flex space-x-6 text-sm text-slate-600">
+                                <span>Entrada: <strong>07:55</strong></span>
+                                <span>Salida: <strong>17:15</strong></span>
+                                <span>Total: <strong>8.33h</strong></span>
+                            </div>
+                        </div>
+                        <!-- @END_MAP )) -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex justify-end space-x-3 p-6 border-t border-slate-200">
+                <button class="px-4 py-2 text-slate-600 hover:text-slate-800" data-event="click:closeModal">
+                    Cerrar
+                </button>
+                <button class="px-4 py-2 bg-turquoise text-white rounded-lg hover:bg-cyan-600 transition-colors" data-event="click:exportEmployeeReport">
+                    <i class="fas fa-download mr-2"></i>
+                    Exportar Reporte
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: EmployeeDetailsModal -->
+
+    <!-- Scripts -->
+    <script>
+        // TODO: Implement business logic, API calls, or state management
+        
+        (function() {
+            // Navigation functionality
+            const navLinks = document.querySelectorAll('[data-section]');
+            const sections = document.querySelectorAll('.section-content');
+            
+            function showSection(sectionId) {
+                sections.forEach(section => section.classList.add('hidden'));
+                navLinks.forEach(link => {
+                    link.classList.remove('text-turquoise', 'bg-slate-700', 'border-r-4', 'border-turquoise');
+                    link.classList.add('text-slate-300');
+                });
+                
+                document.getElementById(sectionId + '-section').classList.remove('hidden');
+                document.querySelector(`[data-section="${sectionId}"]`).classList.add('text-turquoise', 'bg-slate-700', 'border-r-4', 'border-turquoise');
+                document.querySelector(`[data-section="${sectionId}"]`).classList.remove('text-slate-300');
+            }
+            
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const sectionId = this.getAttribute('data-section');
+                    showSection(sectionId);
+                });
+            });
+
+            // Time and date updates
+            function updateDateTime() {
+                const now = new Date();
+                const dateOptions = { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                };
+                const timeOptions = { 
+                    hour: '2-digit', 
+                    minute: '2-digit', 
+                    second: '2-digit' 
+                };
+                
+                const dateElement = document.getElementById('current-date');
+                const timeElement = document.getElementById('current-time');
+                
+                if (dateElement) {
+                    dateElement.textContent = now.toLocaleDateString('es-ES', dateOptions);
+                }
+                if (timeElement) {
+                    timeElement.textContent = now.toLocaleTimeString('es-ES', timeOptions);
+                }
+            }
+            
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+
+            // Mock check-in functionality with SweetAlert
+            function simulateCheckIn(employeeId) {
+                // Simulate successful check-in
+                Swal.fire({
+                    title: '¡Check-in Exitoso!',
+                    html: `
+                        <div class="text-center">
+                            <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=150&h=150" 
+                                 class="w-24 h-24 rounded-full mx-auto mb-4 object-cover" alt="Empleado">
+                            <h3 class="text-lg font-semibold text-navy">Victor Manuel Montaño</h3>
+                            <p class="text-slate-600">Sistemas</p>
+                            <p class="text-lg font-bold text-green-600 mt-2">6.5 horas trabajadas hoy</p>
+                        </div>
+                    `,
+                    icon: 'success',
+                    confirmButtonText: 'Continuar',
+                    confirmButtonColor: '#0891b2',
+                    timer: 3000,
+                    timerProgressBar: true
+                });
+            }
+
+            // Event listeners for interactive elements
+            document.addEventListener('click', function(e) {
+                const target = e.target;
+                
+                // Check-in buttons
+                if (target.matches('[data-event*="manualCheckIn"]') || target.closest('[data-event*="manualCheckIn"]')) {
+                    e.preventDefault();
+                    const employeeId = document.querySelector('[data-bind="employeeId"]').value;
+                    if (employeeId) {
+                        simulateCheckIn(employeeId);
+                    } else {
+                        Swal.fire({
+                            title: 'Error',
+                            text: 'Por favor ingresa un ID válido',
+                            icon: 'error',
+                            confirmButtonColor: '#0891b2'
+                        });
+                    }
+                }
+
+                // Modal functionality
+                if (target.matches('[data-event*="viewDetails"]') || target.closest('[data-event*="viewDetails"]')) {
+                    e.preventDefault();
+                    document.getElementById('employee-details-modal').classList.remove('hidden');
+                    document.getElementById('employee-details-modal').classList.add('flex');
+                }
+
+                if (target.matches('[data-event*="closeModal"]') || target.closest('[data-event*="closeModal"]')) {
+                    e.preventDefault();
+                    document.getElementById('employee-details-modal').classList.add('hidden');
+                    document.getElementById('employee-details-modal').classList.remove('flex');
+                }
+
+                // Form submissions and other actions would be handled here
+                // TODO: Implement actual form validation and API calls
+            });
+
+            // Photo upload preview
+            const photoInput = document.getElementById('photo-input');
+            if (photoInput) {
+                photoInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            const preview = document.getElementById('preview-image');
+                            const photoPreview = document.getElementById('photo-preview');
+                            const uploadArea = document.getElementById('upload-area');
+                            
+                            preview.src = e.target.result;
+                            photoPreview.classList.remove('hidden');
+                            uploadArea.classList.add('hidden');
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+            }
+
+            // Initialize with check-in section
+            showSection('checkin');
+        })();
+    </script>
+</body>
+</html>

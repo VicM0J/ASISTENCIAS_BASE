@@ -1,113 +1,112 @@
-import { sql } from "drizzle-orm";
-import { sqliteTable, text, integer, real, blob } from "drizzle-orm/sqlite-core";
+import { sql, relations } from "drizzle-orm";
+import { pgTable, text, varchar, timestamp, boolean, integer, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const companies = sqliteTable("companies", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  name: text("name").notNull().default("JASANA"),
-  logo: blob("logo"),
-  primaryColor: text("primary_color").notNull().default("#0D9488"),
-  createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`),
+export const employees = pgTable("employees", {
+  id: varchar("id").primaryKey(),
+  fullName: text("full_name").notNull(),
+  department: varchar("department").notNull(),
+  schedule: varchar("schedule").notNull(),
+  barcode: text("barcode"),
+  photo: text("photo"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
-export const schedules = sqliteTable("schedules", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const schedules = pgTable("schedules", {
+  id: varchar("id").primaryKey(),
   name: text("name").notNull(),
   entryTime: text("entry_time").notNull(),
+  exitTime: text("exit_time").notNull(),
   breakfastStart: text("breakfast_start"),
   breakfastEnd: text("breakfast_end"),
   lunchStart: text("lunch_start"),
   lunchEnd: text("lunch_end"),
-  exitTime: text("exit_time").notNull(),
-  overtimeAllowed: integer("overtime_allowed", { mode: "boolean" }).default(false),
-  createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`),
+  isActive: boolean("is_active").default(true),
 });
 
-export const employees = sqliteTable("employees", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  employeeId: text("employee_id").notNull().unique(),
-  fullName: text("full_name").notNull(),
-  email: text("email"),
-  phone: text("phone"),
-  department: text("department").notNull(),
-  scheduleId: integer("schedule_id").references(() => schedules.id),
-  photo: blob("photo"),
-  barcode: text("barcode").notNull(),
-  isActive: integer("is_active", { mode: "boolean" }).default(true),
-  createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`),
+export const attendanceRecords = pgTable("attendance_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id),
+  checkInTime: timestamp("check_in_time"),
+  checkOutTime: timestamp("check_out_time"),
+  date: varchar("date").notNull(),
+  totalHours: text("total_hours"),
+  overtimeHours: text("overtime_hours"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
-export const attendances = sqliteTable("attendances", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  employeeId: integer("employee_id").notNull().references(() => employees.id),
-  checkIn: integer("check_in", { mode: "timestamp" }),
-  checkOut: integer("check_out", { mode: "timestamp" }),
-  breakStart: integer("break_start", { mode: "timestamp" }),
-  breakEnd: integer("break_end", { mode: "timestamp" }),
-  lunchStart: integer("lunch_start", { mode: "timestamp" }),
-  lunchEnd: integer("lunch_end", { mode: "timestamp" }),
-  totalHours: real("total_hours").default(0),
-  overtimeHours: real("overtime_hours").default(0),
-  date: text("date").notNull(), // YYYY-MM-DD format
-  status: text("status").notNull().default("pending"), // pending, complete, incomplete
-  createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`),
+export const systemSettings = pgTable("system_settings", {
+  id: varchar("id").primaryKey().default("main"),
+  blockingTime: integer("blocking_time").default(60),
+  entryTolerance: integer("entry_tolerance").default(15),
+  autoBackup: boolean("auto_backup").default(true),
+  cameraAudio: boolean("camera_audio").default(false),
+  credentialSettings: json("credential_settings").$type<{
+    colorScheme: string;
+    fontSize: string;
+    showDepartment: boolean;
+    showPhoto: boolean;
+    showBarcode: boolean;
+    fontFamily: string;
+  }>().default({
+    colorScheme: "default",
+    fontSize: "medium",
+    showDepartment: true,
+    showPhoto: true,
+    showBarcode: true,
+    fontFamily: "inter"
+  }),
 });
 
-// Zod schemas
-export const insertCompanySchema = createInsertSchema(companies).omit({
-  id: true,
-  createdAt: true,
-});
+// Relations
+export const employeesRelations = relations(employees, ({ many }) => ({
+  attendanceRecords: many(attendanceRecords),
+}));
 
-export const insertScheduleSchema = createInsertSchema(schedules).omit({
-  id: true,
-  createdAt: true,
-});
+export const attendanceRecordsRelations = relations(attendanceRecords, ({ one }) => ({
+  employee: one(employees, {
+    fields: [attendanceRecords.employeeId],
+    references: [employees.id],
+  }),
+}));
 
+// Insert schemas
 export const insertEmployeeSchema = createInsertSchema(employees).omit({
-  id: true,
   createdAt: true,
-}).extend({
-  email: z.string().email().optional().or(z.literal("")),
-  phone: z.string().optional().or(z.literal("")),
-  scheduleId: z.number().optional().or(z.string().transform(val => val === "" ? undefined : parseInt(val)).optional()),
 });
 
-export const insertAttendanceSchema = createInsertSchema(attendances).omit({
+export const insertScheduleSchema = createInsertSchema(schedules);
+
+export const insertAttendanceRecordSchema = createInsertSchema(attendanceRecords).omit({
   id: true,
   createdAt: true,
 });
+
+export const insertSystemSettingsSchema = createInsertSchema(systemSettings);
 
 // Types
-export type Company = typeof companies.$inferSelect;
-export type InsertCompany = z.infer<typeof insertCompanySchema>;
-
-export type Schedule = typeof schedules.$inferSelect;
-export type InsertSchedule = z.infer<typeof insertScheduleSchema>;
-
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+export type Schedule = typeof schedules.$inferSelect;
+export type InsertSchedule = z.infer<typeof insertScheduleSchema>;
+export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
+export type InsertAttendanceRecord = z.infer<typeof insertAttendanceRecordSchema>;
+export type SystemSettings = typeof systemSettings.$inferSelect;
+export type InsertSystemSettings = z.infer<typeof insertSystemSettingsSchema>;
 
-export type Attendance = typeof attendances.$inferSelect;
-export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
+// Legacy user schema for existing auth system
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+});
 
-// Extended types for API responses
-export type EmployeeWithSchedule = Employee & {
-  schedule?: Schedule;
-};
+export const insertUserSchema = createInsertSchema(users).pick({
+  username: true,
+  password: true,
+});
 
-export type AttendanceWithEmployee = Attendance & {
-  employee: Employee;
-};
-
-export type AttendanceReport = {
-  employeeId: string;
-  fullName: string;
-  department: string;
-  checkIns: string[];
-  checkOuts: string[];
-  totalHours: number;
-  overtimeHours: number;
-  date: string;
-};
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;
